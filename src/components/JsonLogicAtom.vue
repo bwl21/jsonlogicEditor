@@ -10,8 +10,17 @@
     @mouseleave="onMouseLeave"
   >
     <!-- Header with operator and controls -->
-    <div class="atom-header">
+    <div class="atom-header" @mouseenter="onPreviewEnter" @mouseleave="onPreviewLeave">
       <div class="drag-handle">⋮⋮</div>
+      
+      <button 
+        v-if="localNode.operator && localNode.arguments && localNode.arguments.length > 0" 
+        @click="toggleCollapse" 
+        class="collapse-btn" 
+        :title="isCollapsed ? 'Expand' : 'Collapse'"
+      >
+        {{ isCollapsed ? '▶' : '▼' }}
+      </button>
       
       <select 
         v-model="localNode.operator" 
@@ -34,6 +43,10 @@
         </optgroup>
       </select>
       
+      <span v-if="isCollapsed && localNode.operator" class="condition-count">
+        ({{ localNode.arguments?.length || 0 }} {{ localNode.arguments?.length === 1 ? 'argument' : 'arguments' }})
+      </span>
+      
       <div class="header-controls">
         <div class="conversion-dropdown" v-if="conversionOptions.length > 0">
           <button @click="toggleConversionMenu" class="convert-btn" title="Convert operator">
@@ -55,8 +68,28 @@
       </div>
     </div>
 
+    <!-- Preview when collapsed and hovered -->
+    <div v-if="isCollapsed && showPreview && localNode.operator" class="preview-popup">
+      <div class="preview-content">
+        <div class="preview-arguments">
+          <div 
+            v-for="(argument, index) in localNode.arguments?.slice(0, 3)" 
+            :key="argument.id"
+            class="preview-argument"
+          >
+            <div class="preview-text">
+              {{ getArgumentLabel(index) }}: {{ getPreviewText(argument) }}
+            </div>
+          </div>
+          <div v-if="(localNode.arguments?.length || 0) > 3" class="preview-more">
+            ... and {{ (localNode.arguments?.length || 0) - 3 }} more
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Arguments -->
-    <div v-if="localNode.operator" class="atom-body">
+    <div v-if="localNode.operator && !isCollapsed" class="atom-body">
       <div class="arguments-container">
         <div 
           v-for="(argument, index) in localNode.arguments" 
@@ -188,6 +221,8 @@ const isDragging = ref(false)
 const isDirectlyHovered = ref(false)
 const hoveredArgumentIndex = ref<number | null>(null)
 const showConversionMenu = ref(false)
+const isCollapsed = ref(false)
+const showPreview = ref(false)
 
 // Watch for external changes
 watch(() => props.node, (newNode) => {
@@ -502,17 +537,48 @@ function convertToOperator(newOperator: string) {
   showConversionMenu.value = false
   emit('update', localNode.value)
 }
+
+// Collapse management
+function toggleCollapse() {
+  isCollapsed.value = !isCollapsed.value
+}
+
+function onPreviewEnter() {
+  if (isCollapsed.value) {
+    showPreview.value = true
+  }
+}
+
+function onPreviewLeave() {
+  showPreview.value = false
+}
+
+function getPreviewText(argument: JsonLogicNode): string {
+  if (argument.type === 'variable') {
+    return `var: ${argument.value}`
+  } else if (argument.type === 'literal') {
+    return `${argument.value}`
+  } else if (argument.type === 'expression' && argument.operator) {
+    return `${argument.operator.toUpperCase()}`
+  } else if (argument.type === 'array') {
+    return `[${argument.items?.length || 0} items]`
+  }
+  return 'condition'
+}
 </script>
 
 <style scoped>
 .json-logic-atom {
+  position: relative;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   background: white;
-  margin: 8px;
+  margin: 8px 0;
   min-width: 200px;
+  width: 100%;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.2s ease;
+  overflow: visible;
 }
 
 .json-logic-atom:hover {
@@ -648,6 +714,27 @@ function convertToOperator(newOperator: string) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 10px;
+}
+
+.arguments-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.arguments-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.arguments-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.arguments-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .argument-wrapper {
@@ -809,5 +896,99 @@ function convertToOperator(newOperator: string) {
 
 .add-arg-btn:hover {
   background: #059669;
+}
+
+.collapse-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-right: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.collapse-btn:hover {
+  background: rgba(100, 116, 139, 0.1);
+}
+
+.condition-count {
+  color: #64748b;
+  font-size: 12px;
+  opacity: 0.7;
+  margin-left: 8px;
+  flex: 1;
+}
+
+.preview-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.preview-content {
+  padding: 12px;
+}
+
+.preview-arguments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-argument {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.preview-text {
+  background: #f1f5f9;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #475569;
+  font-family: monospace;
+  flex: 1;
+}
+
+.preview-more {
+  color: #6b7280;
+  font-style: italic;
+  font-size: 11px;
+  text-align: center;
+  padding: 4px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .arguments-container {
+    overflow-x: visible;
+  }
+  
+  .collapse-btn {
+    font-size: 14px;
+    padding: 4px 8px;
+  }
+  
+  .condition-count {
+    font-size: 11px;
+  }
+  
+  .operator-select {
+    min-width: 120px;
+    font-size: 12px;
+  }
 }
 </style>

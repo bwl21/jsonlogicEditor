@@ -9,9 +9,13 @@
     @mouseleave="onMouseLeave"
   >
     <!-- Header -->
-    <div class="operator-header">
+    <div class="operator-header" @mouseenter="onPreviewEnter" @mouseleave="onPreviewLeave">
       <div class="drag-handle">⋮⋮</div>
+      <button @click="toggleCollapse" class="collapse-btn" :title="isCollapsed ? 'Expand' : 'Collapse'">
+        {{ isCollapsed ? '▶' : '▼' }}
+      </button>
       <span class="operator-label">OR</span>
+      <span v-if="isCollapsed" class="condition-count">({{ localNode.arguments?.length || 0 }} conditions)</span>
       <div class="header-controls">
         <div class="conversion-dropdown" v-if="conversionOptions.length > 0">
           <button @click="toggleConversionMenu" class="convert-btn" title="Convert operator">
@@ -33,8 +37,29 @@
       </div>
     </div>
 
+    <!-- Preview when collapsed and hovered -->
+    <div v-if="isCollapsed && showPreview" class="preview-popup">
+      <div class="preview-content">
+        <div class="preview-arguments">
+          <div 
+            v-for="(argument, index) in localNode.arguments?.slice(0, 3)" 
+            :key="argument.id"
+            class="preview-argument"
+          >
+            <div v-if="index > 0" class="preview-or-badge">OR</div>
+            <div class="preview-text">
+              {{ getPreviewText(argument) }}
+            </div>
+          </div>
+          <div v-if="(localNode.arguments?.length || 0) > 3" class="preview-more">
+            ... and {{ (localNode.arguments?.length || 0) - 3 }} more
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Horizontal Arguments -->
-    <div class="or-body">
+    <div v-if="!isCollapsed" class="or-body">
       <div class="or-arguments">
         <div 
           v-for="(argument, index) in localNode.arguments" 
@@ -139,6 +164,8 @@ const localNode = ref<JsonLogicNode>({ ...props.node })
 const isDragging = ref(false)
 const isDirectlyHovered = ref(false)
 const showConversionMenu = ref(false)
+const isCollapsed = ref(false)
+const showPreview = ref(false)
 
 // Watch for external changes
 watch(() => props.node, (newNode) => {
@@ -273,6 +300,34 @@ function convertToOperator(newOperator: string) {
   emit('convert', newOperator)
 }
 
+// Collapse management
+function toggleCollapse() {
+  isCollapsed.value = !isCollapsed.value
+}
+
+function onPreviewEnter() {
+  if (isCollapsed.value) {
+    showPreview.value = true
+  }
+}
+
+function onPreviewLeave() {
+  showPreview.value = false
+}
+
+function getPreviewText(argument: JsonLogicNode): string {
+  if (argument.type === 'variable') {
+    return `var: ${argument.value}`
+  } else if (argument.type === 'literal') {
+    return `${argument.value}`
+  } else if (argument.type === 'expression' && argument.operator) {
+    return `${argument.operator.toUpperCase()}`
+  } else if (argument.type === 'array') {
+    return `[${argument.items?.length || 0} items]`
+  }
+  return 'condition'
+}
+
 // Hover management
 function onMouseEnter(event: MouseEvent) {
   // Only set hover if this is the direct target, not a child
@@ -288,13 +343,16 @@ function onMouseLeave() {
 
 <style scoped>
 .or-operator {
+  position: relative;
   border: 2px solid #f59e0b;
   border-radius: 8px;
   background: white;
-  margin: 8px;
+  margin: 8px 0;
   min-width: 300px;
+  width: 100%;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.2s ease;
+  overflow: visible;
 }
 
 .or-operator .header-controls {
@@ -342,11 +400,34 @@ function onMouseLeave() {
   cursor: grabbing;
 }
 
+.collapse-btn {
+  background: none;
+  border: none;
+  color: #92400e;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-right: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.collapse-btn:hover {
+  background: rgba(146, 64, 14, 0.1);
+}
+
 .operator-label {
-  flex: 1;
   font-weight: bold;
   color: #92400e;
   font-size: 14px;
+}
+
+.condition-count {
+  color: #92400e;
+  font-size: 12px;
+  opacity: 0.7;
+  margin-left: 8px;
+  flex: 1;
 }
 
 .delete-btn {
@@ -421,23 +502,104 @@ function onMouseLeave() {
   border-bottom: none;
 }
 
+.preview-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #f59e0b;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.preview-content {
+  padding: 12px;
+}
+
+.preview-arguments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-argument {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.preview-or-badge {
+  background: #f59e0b;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.preview-text {
+  background: #fef3c7;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #92400e;
+  font-family: monospace;
+  flex: 1;
+}
+
+.preview-more {
+  color: #6b7280;
+  font-style: italic;
+  font-size: 11px;
+  text-align: center;
+  padding: 4px;
+}
+
 .or-body {
   padding: 16px;
 }
 
 .or-arguments {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-start;
   gap: 16px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 10px;
+  min-height: 60px;
+}
+
+.or-arguments::-webkit-scrollbar {
+  height: 6px;
+}
+
+.or-arguments::-webkit-scrollbar-track {
+  background: #fef3c7;
+  border-radius: 3px;
+}
+
+.or-arguments::-webkit-scrollbar-thumb {
+  background: #f59e0b;
+  border-radius: 3px;
+}
+
+.or-arguments::-webkit-scrollbar-thumb:hover {
+  background: #d97706;
 }
 
 .or-argument {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  flex: 1;
-  min-width: 250px;
+  flex: 0 0 auto;
+  min-width: 280px;
+  max-width: 400px;
 }
 
 .or-badge {
@@ -564,17 +726,29 @@ function onMouseLeave() {
 @media (max-width: 768px) {
   .or-arguments {
     flex-direction: column;
+    overflow-x: visible;
   }
   
   .or-argument {
     flex-direction: column;
     align-items: stretch;
+    min-width: auto;
+    max-width: none;
   }
   
   .or-badge {
     align-self: center;
     margin-top: 8px;
     margin-bottom: 8px;
+  }
+  
+  .collapse-btn {
+    font-size: 14px;
+    padding: 4px 8px;
+  }
+  
+  .condition-count {
+    font-size: 11px;
   }
 }
 </style>

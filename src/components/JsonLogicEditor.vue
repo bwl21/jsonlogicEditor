@@ -25,24 +25,31 @@
       </div>
 
       <div v-else class="rules-container">
+        <!-- Debug info -->
+        <!-- <div style="background: #f0f0f0; padding: 10px; margin: 10px; font-family: monospace; font-size: 12px;">
+          Debug: {{ rules.map(r => ({ id: r.id, operator: r.operator, type: r.type })) }}
+        </div> -->
+        
         <!-- Use specific operator components for better layout -->
         <OrOperator
-          v-for="rule in rules.filter(r => r.operator === 'or')"
+          v-for="rule in orRules"
           :key="rule.id"
           :node="rule"
           @update="onRuleUpdate(rules.findIndex(r => r.id === rule.id), $event)"
           @delete="onRuleDelete(rules.findIndex(r => r.id === rule.id))"
+          @convert="onRuleConvert(rules.findIndex(r => r.id === rule.id), $event)"
         />
         <AndOperator
-          v-for="rule in rules.filter(r => r.operator === 'and')"
+          v-for="rule in andRules"
           :key="rule.id"
           :node="rule"
           @update="onRuleUpdate(rules.findIndex(r => r.id === rule.id), $event)"
           @delete="onRuleDelete(rules.findIndex(r => r.id === rule.id))"
+          @convert="onRuleConvert(rules.findIndex(r => r.id === rule.id), $event)"
         />
         <!-- Generic component for other operators -->
         <JsonLogicAtom
-          v-for="rule in rules.filter(r => r.operator !== 'or' && r.operator !== 'and')"
+          v-for="rule in otherRules"
           :key="rule.id"
           :node="rule"
           @update="onRuleUpdate(rules.findIndex(r => r.id === rule.id), $event)"
@@ -88,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import JsonLogicAtom from './JsonLogicAtom.vue'
 import OrOperator from './OrOperator.vue'
 import AndOperator from './AndOperator.vue'
@@ -114,6 +121,16 @@ const formattedJson = computed(() => {
   }, null, 2)
 })
 
+const orRules = computed(() => rules.value.filter(r => r.operator === 'or'))
+const andRules = computed(() => rules.value.filter(r => r.operator === 'and'))
+const otherRules = computed(() => rules.value.filter(r => r.operator !== 'or' && r.operator !== 'and'))
+
+// Watch for operator changes to force re-render
+watch(rules, () => {
+  // Force reactivity update when rules change
+  nextTick()
+}, { deep: true })
+
 // Methods
 function generateId(): string {
   return Math.random().toString(36).substr(2, 9)
@@ -136,6 +153,18 @@ function onRuleUpdate(index: number, updatedRule: JsonLogicNode) {
 
 function onRuleDelete(index: number) {
   rules.value.splice(index, 1)
+}
+
+function onRuleConvert(index: number, newOperator: string) {
+  if (index < 0 || index >= rules.value.length) return
+  
+  // Convert the operator while keeping all arguments and structure
+  const convertedRule = {
+    ...rules.value[index],
+    operator: newOperator
+  }
+  
+  rules.value[index] = convertedRule
 }
 
 function clearAll() {
@@ -343,10 +372,11 @@ function convertFromJsonLogic(json: any): JsonLogicNode {
 
 <style scoped>
 .json-logic-editor {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  min-height: 100vh;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-sizing: border-box;
 }
 
 .editor-header {
@@ -447,6 +477,28 @@ function convertFromJsonLogic(json: any): JsonLogicNode {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 10px;
+}
+
+.rules-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.rules-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.rules-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.rules-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .output-panel {

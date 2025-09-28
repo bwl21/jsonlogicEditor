@@ -8,7 +8,7 @@
     </header>
 
     <main class="app-main">
-      <div class="container">
+      <div class="container" :class="{ 'full-width': !showExamples }">
         <!-- Quick Start Examples -->
         <section class="examples-section" v-if="showExamples">
           <h2>Quick Start Examples</h2>
@@ -286,12 +286,19 @@ body {
   color: #333;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
+  width: 100%;
+  overflow-x: auto;
 }
 
 .container {
-  max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
   padding: 0 20px;
+}
+
+.container.full-width {
+  max-width: none;
+  padding: 0;
 }
 
 .app-header {
