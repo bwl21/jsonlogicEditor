@@ -21,6 +21,7 @@
     class="json-logic-atom"
     :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered }"
     :data-ui-hint="currentOperator?.uiHints?.join(' ')"
+    :data-display-mode="displayMode"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
@@ -29,70 +30,71 @@
   >
     <!-- Header with operator and controls -->
     <div class="atom-header" @mouseenter="onPreviewEnter" @mouseleave="onPreviewLeave">
+      <!-- Display mode buttons -->
+      <DisplayModeButtons 
+        v-if="localNode.operator"
+        v-model="displayMode"
+      />
+      
       <div class="drag-handle">⋮⋮</div>
       
-      <button 
-        v-if="localNode.operator && localNode.arguments && localNode.arguments.length > 0" 
-        @click="toggleCollapse" 
-        class="collapse-btn" 
-        :title="isCollapsed ? 'Expand' : 'Collapse'"
-      >
-        {{ isCollapsed ? '▶' : '▼' }}
-      </button>
-      
-      <select 
-        v-model="localNode.operator" 
-        @change="onOperatorChange"
-        class="operator-select"
-      >
-        <option value="">Select operator...</option>
-        <optgroup 
-          v-for="category in operatorCategories" 
-          :key="category"
-          :label="category.toUpperCase()"
+      <div class="operator-wrapper">
+        <select 
+          v-if="!localNode.operator"
+          v-model="localNode.operator" 
+          @change="onOperatorChange"
+          class="operator-select"
         >
-          <option 
-            v-for="op in getOperatorsByCategory(category)"
-            :key="op.name"
-            :value="op.name"
+          <option value="">Select operator...</option>
+          <optgroup 
+            v-for="category in operatorCategories" 
+            :key="category"
+            :label="category.toUpperCase()"
           >
-            {{ op.label }}
-          </option>
-        </optgroup>
-      </select>
+            <option 
+              v-for="op in getOperatorsByCategory(category)"
+              :key="op.name"
+              :value="op.name"
+            >
+              {{ op.label }}
+            </option>
+          </optgroup>
+        </select>
+        
+        <!-- Operator as clickable button when selected -->
+        <button 
+          v-else
+          @click="toggleConversionMenu" 
+          class="operator-button"
+          :title="showConversionMenu ? 'Close conversion menu' : `Convert ${localNode.operator} to different operator`"
+        >
+          {{ currentOperator?.label || localNode.operator }}
+        </button>
+        
+        <ConversionMenu
+          :is-open="showConversionMenu"
+          :options="conversionOptions"
+          @close="showConversionMenu = false"
+          @convert="convertToOperator"
+        />
+      </div>
       
-      <span v-if="isCollapsed && localNode.operator" class="condition-count">
+      <span v-if="displayMode === 'collapsed' && localNode.operator" class="condition-count">
         ({{ localNode.arguments?.length || 0 }} {{ localNode.arguments?.length === 1 ? 'argument' : 'arguments' }})
       </span>
       
-      <div class="header-controls">
-        <div class="conversion-dropdown" v-if="conversionOptions.length > 0">
-          <button @click="toggleConversionMenu" class="convert-btn" :title="showConversionMenu ? 'Close conversion menu' : `Convert ${localNode.operator || 'operator'} to different type`">
-            <span class="convert-icon">⟲</span>
-            <span class="convert-label">Convert</span>
-          </button>
-          <div v-if="showConversionMenu" class="conversion-menu">
-            <button 
-              v-for="option in conversionOptions"
-              :key="option.operator"
-              @click="convertToOperator(option.operator)"
-              class="conversion-option"
-              :title="`Convert to ${option.label}: ${option.description}`"
-            >
-              <span class="option-label">{{ option.label }}</span>
-              <span class="option-category">({{ option.category }})</span>
-            </button>
-          </div>
-        </div>
-        <button @click="$emit('delete')" class="delete-btn" :title="`Delete this ${localNode.operator || 'operator'}`">
-          <span class="delete-icon">×</span>
-          <span class="delete-label">Delete</span>
-        </button>
-      </div>
+      <button 
+        v-if="displayMode !== 'collapsed'"
+        @click="$emit('delete')" 
+        class="delete-btn" 
+        :title="`Delete this ${localNode.operator || 'operator'}`"
+      >
+        ×
+      </button>
     </div>
 
     <!-- Preview when collapsed and hovered -->
-    <div v-if="isCollapsed && showPreview && localNode.operator" class="preview-popup">
+    <div v-if="displayMode === 'collapsed' && showPreview && localNode.operator" class="preview-popup">
       <div class="preview-content">
         <div class="preview-arguments">
           <div 
@@ -112,7 +114,7 @@
     </div>
 
     <!-- Arguments -->
-    <div v-if="localNode.operator && !isCollapsed" class="atom-body">
+    <div v-if="localNode.operator && displayMode !== 'collapsed'" class="atom-body">
       <div class="arguments-container">
         <div 
           v-for="(argument, index) in localNode.arguments" 
@@ -216,6 +218,128 @@
       </div>
     </div>
   </div>
+
+  <!-- Full-screen overlay -->
+  <div v-if="displayMode === 'full'" class="fullscreen-overlay" @click.self="exitFullMode">
+    <div class="fullscreen-content">
+      <div class="fullscreen-header">
+        <!-- Display mode buttons in full screen -->
+        <DisplayModeButtons v-model="displayMode" />
+        
+        <h3>{{ localNode.operator?.toUpperCase() }} Expression</h3>
+        
+        <div class="spacer"></div>
+      </div>
+      <div class="fullscreen-body">
+        <div class="arguments-container">
+          <div 
+            v-for="(argument, index) in localNode.arguments" 
+            :key="argument.id"
+            class="argument-wrapper"
+            @mouseenter="onArgumentMouseEnter(index, $event)"
+            @mouseleave="onArgumentMouseLeave(index)"
+          >
+            <div class="argument-label" v-if="getArgumentLabel(index)">
+              {{ getArgumentLabel(index) }}:
+            </div>
+            
+            <!-- Specific operator components for better layout -->
+            <OrOperator
+              v-if="argument.type === 'expression' && argument.operator === 'or'"
+              :node="argument"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentConvert(index, $event)"
+            />
+            <AndOperator
+              v-else-if="argument.type === 'expression' && argument.operator === 'and'"
+              :node="argument"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentConvert(index, $event)"
+            />
+            <!-- Recursive component for other nested expressions -->
+            <JsonLogicAtom
+              v-else-if="argument.type === 'expression'"
+              :node="argument"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentConvert(index, $event)"
+            />
+            <!-- Variable input with field name suggestions -->
+            <FieldNameInput
+              v-else-if="argument.type === 'variable'"
+              :modelValue="argument.value"
+              @update:modelValue="onArgumentUpdate(index, { ...argument, value: $event })"
+              :placeholder="`Variable ${index + 1}`"
+              class="variable-input"
+            />
+            <!-- Array input -->
+            <div v-else-if="argument.type === 'array'" class="array-input">
+              <span class="array-label">Array:</span>
+              <div class="array-items">
+                <div 
+                  v-for="(item, itemIndex) in argument.items" 
+                  :key="item.id"
+                  class="array-item"
+                >
+                  <JsonLogicAtom
+                    v-if="item.type === 'expression'"
+                    :node="item"
+                    @update="onArrayItemUpdate(index, itemIndex, $event)"
+                    @delete="onArrayItemDelete(index, itemIndex)"
+                  />
+                  <input 
+                    v-else
+                    v-model="item.value" 
+                    @input="onArrayItemUpdate(index, itemIndex, item)"
+                    class="array-item-input"
+                    :placeholder="`Item ${itemIndex + 1}`"
+                  />
+                  <button @click="onArrayItemDelete(index, itemIndex)" class="delete-array-item-btn">×</button>
+                </div>
+                <button @click="addArrayItem(index)" class="add-array-item-btn">+ Add Item</button>
+              </div>
+              <div class="argument-controls" :class="{ 'is-visible': hoveredArgumentIndex === index }">
+                <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+              </div>
+            </div>
+            
+            <!-- Literal input with type selection -->
+            <div v-else class="literal-input">
+              <select v-model="argument.type" @change="onArgumentTypeChange(index)" class="type-select">
+                <option value="literal">Literal</option>
+                <option value="variable">Variable</option>
+                <option value="array">Array</option>
+                <option value="expression">Expression</option>
+              </select>
+              <input 
+                v-if="argument.type === 'literal'"
+                v-model="argument.value" 
+                @input="onArgumentUpdate(index, argument)"
+                :placeholder="getLiteralPlaceholder(argument, index)"
+                class="value-input"
+                :type="getLiteralInputType(argument)"
+              />
+              <div class="argument-controls" :class="{ 'is-visible': hoveredArgumentIndex === index }">
+                <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Add new argument button -->
+          <div v-if="canAddMoreArgs" class="add-arg-wrapper">
+            <button 
+              @click="addArgument" 
+              class="add-arg-btn"
+            >
+              + Add {{ getNextArgumentLabel() }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -225,7 +349,10 @@ import { OPERATORS } from '../types/JsonLogic'
 import FieldNameInput from './FieldNameInput.vue'
 import OrOperator from './OrOperator.vue'
 import AndOperator from './AndOperator.vue'
+import DisplayModeButtons from './DisplayModeButtons.vue'
+import ConversionMenu from './ConversionMenu.vue'
 import { getConversionOptions, convertOperatorNode } from '../utils/operatorConversion'
+import { useDisplayMode } from '../composables/useDisplayMode'
 
 interface Props {
   node: JsonLogicNode
@@ -245,7 +372,8 @@ const isDragging = ref(false)
 const isDirectlyHovered = ref(false)
 const hoveredArgumentIndex = ref<number | null>(null)
 const showConversionMenu = ref(false)
-const isCollapsed = ref(false)
+// Display mode management
+const { displayMode, exitFullMode } = useDisplayMode()
 const showPreview = ref(false)
 
 // Watch for external changes
@@ -272,6 +400,8 @@ const conversionOptions = computed(() => {
   if (!localNode.value.operator) return []
   return getConversionOptions(localNode.value.operator)
 })
+
+
 
 // Methods
 function getOperatorsByCategory(category: string): JsonLogicOperator[] {
@@ -468,6 +598,16 @@ function addArrayItem(argumentIndex: number) {
   emit('update', localNode.value)
 }
 
+function onArrayItemDelete(argumentIndex: number, itemIndex: number) {
+  if (!localNode.value.arguments) return
+  
+  const argument = localNode.value.arguments[argumentIndex]
+  if (argument.type !== 'array' || !argument.items) return
+  
+  argument.items.splice(itemIndex, 1)
+  emit('update', localNode.value)
+}
+
 function removeArrayItem(argumentIndex: number, itemIndex: number) {
   if (!localNode.value.arguments) return
   
@@ -562,13 +702,10 @@ function convertToOperator(newOperator: string) {
   emit('update', localNode.value)
 }
 
-// Collapse management
-function toggleCollapse() {
-  isCollapsed.value = !isCollapsed.value
-}
+// Display mode functions are provided by useDisplayMode composable
 
 function onPreviewEnter() {
-  if (isCollapsed.value) {
+  if (displayMode.value === 'collapsed') {
     showPreview.value = true
   }
 }
@@ -605,6 +742,54 @@ function getPreviewText(argument: JsonLogicNode): string {
   overflow: visible;
 }
 
+/* Collapsed state - compact horizontal and vertical */
+.json-logic-atom[data-display-mode="collapsed"] {
+  display: inline-block;
+  margin: 4px 8px 4px 0;
+  min-width: auto;
+  max-width: 300px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .atom-header {
+  padding: 6px 12px;
+  min-height: auto;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .operator-select {
+  min-width: 80px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+
+
+.json-logic-atom[data-display-mode="collapsed"] .condition-count {
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .header-controls {
+  gap: 8px;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .convert-btn,
+.json-logic-atom[data-display-mode="collapsed"] .delete-btn,
+.json-logic-atom[data-display-mode="collapsed"] .expand-btn {
+  padding: 4px 8px;
+  min-width: 60px;
+  font-size: 11px;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .convert-label,
+.json-logic-atom[data-display-mode="collapsed"] .delete-label,
+.json-logic-atom[data-display-mode="collapsed"] .expand-label {
+  font-size: 10px;
+}
+
+
+
 .json-logic-atom:hover {
   border-color: #3b82f6;
   box-shadow: 0 4px 8px rgba(0,0,0,0.15);
@@ -631,14 +816,10 @@ function getPreviewText(argument: JsonLogicNode): string {
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
   border-radius: 6px 6px 0 0;
+  gap: 8px;
 }
 
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-left: auto;
-}
+
 
 .conversion-dropdown {
   position: relative;
@@ -681,74 +862,7 @@ function getPreviewText(argument: JsonLogicNode): string {
   font-size: 12px;
 }
 
-.conversion-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  background: white;
-  border: 2px solid #64748b;
-  border-radius: 8px;
-  box-shadow: 0 8px 25px rgba(100, 116, 139, 0.15);
-  z-index: 1000;
-  min-width: 160px;
-  max-height: 250px;
-  overflow-y: auto;
-  backdrop-filter: blur(10px);
-}
 
-.conversion-menu::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  right: 20px;
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 8px solid #64748b;
-}
-
-.conversion-option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
-  padding: 10px 14px;
-  text-align: left;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 12px;
-  border-bottom: 1px solid #f3f4f6;
-  transition: background 0.2s ease;
-}
-
-.conversion-option:hover {
-  background: #f1f5f9;
-  transform: translateX(4px);
-}
-
-.conversion-option:active {
-  background: #e2e8f0;
-  transform: translateX(2px);
-}
-
-.conversion-option:last-child {
-  border-bottom: none;
-}
-
-.option-label {
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 2px;
-}
-
-.option-category {
-  font-size: 10px;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
 
 .drag-handle {
   cursor: grab;
@@ -761,16 +875,71 @@ function getPreviewText(argument: JsonLogicNode): string {
   cursor: grabbing;
 }
 
+.operator-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  margin-right: 8px;
+}
+
 .operator-select {
   flex: 1;
   padding: 4px 8px;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  margin-right: 8px;
+}
+
+.operator-button {
+  background: #f8fafc;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex: 1;
+  text-align: left;
+}
+
+.operator-button:hover {
+  background: #f1f5f9;
+  border-color: #9ca3af;
+  color: #1f2937;
 }
 
 .delete-btn {
   background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+.delete-btn:hover {
+  background: #dc2626;
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.delete-btn:active {
+  transform: scale(0.9);
+}
+
+.expand-btn {
+  background: #10b981;
   color: white;
   border: none;
   border-radius: 6px;
@@ -786,24 +955,161 @@ function getPreviewText(argument: JsonLogicNode): string {
   justify-content: center;
 }
 
-.delete-btn:hover {
+.expand-btn:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.expand-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.expand-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.expand-label {
+  font-size: 12px;
+}
+
+.full-btn {
+  background: #10b981;
+}
+
+.full-btn:hover {
+  background: #059669;
+}
+
+/* Full-screen overlay */
+.fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.fullscreen-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 90vw;
+  max-height: 90vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fullscreen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 2px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.fullscreen-header .spacer {
+  width: 60px; /* Same width as DisplayModeButtons for centering */
+}
+
+.fullscreen-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.exit-full-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.exit-full-btn:hover {
   background: #dc2626;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
 }
 
-.delete-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
-}
-
-.delete-icon {
-  font-size: 16px;
+.exit-icon {
+  font-size: 18px;
   line-height: 1;
 }
 
-.delete-label {
-  font-size: 12px;
+.exit-label {
+  font-size: 13px;
+}
+
+.fullscreen-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  background: white;
+}
+
+.fullscreen-body .arguments-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fullscreen-body .argument-wrapper {
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  background: #f9fafb;
+}
+
+.fullscreen-body .argument-label {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.fullscreen-body .add-arg-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.fullscreen-body .add-arg-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.fullscreen-body .add-arg-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
 .atom-body {
@@ -998,28 +1304,7 @@ function getPreviewText(argument: JsonLogicNode): string {
   background: #059669;
 }
 
-.collapse-btn {
-  background: rgba(100, 116, 139, 0.1);
-  border: 1px solid rgba(100, 116, 139, 0.2);
-  color: #64748b;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  margin-right: 12px;
-  transition: all 0.2s ease;
-  font-weight: 500;
-  min-width: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
-.collapse-btn:hover {
-  background: rgba(100, 116, 139, 0.2);
-  border-color: rgba(100, 116, 139, 0.3);
-  transform: translateY(-1px);
-}
 
 .condition-count {
   color: #64748b;
