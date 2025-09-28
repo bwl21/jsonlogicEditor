@@ -1,11 +1,13 @@
 <template>
   <div 
     class="json-logic-atom"
-    :class="{ 'is-dragging': isDragging }"
+    :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered }"
     :data-ui-hint="currentOperator?.uiHints?.join(' ')"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
   >
     <!-- Header with operator and controls -->
     <div class="atom-header">
@@ -32,7 +34,25 @@
         </optgroup>
       </select>
       
-      <button @click="$emit('delete')" class="delete-btn" title="Delete">×</button>
+      <div class="header-controls">
+        <div class="conversion-dropdown" v-if="conversionOptions.length > 0">
+          <button @click="toggleConversionMenu" class="convert-btn" title="Convert operator">
+            ⟲
+          </button>
+          <div v-if="showConversionMenu" class="conversion-menu">
+            <button 
+              v-for="option in conversionOptions"
+              :key="option.operator"
+              @click="convertToOperator(option.operator)"
+              class="conversion-option"
+              :title="option.description"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+        <button @click="$emit('delete')" class="delete-btn" title="Delete">×</button>
+      </div>
     </div>
 
     <!-- Arguments -->
@@ -42,6 +62,8 @@
           v-for="(argument, index) in localNode.arguments" 
           :key="argument.id"
           class="argument-wrapper"
+          @mouseenter="onArgumentMouseEnter(index, $event)"
+          @mouseleave="onArgumentMouseLeave(index)"
         >
           <div class="argument-label" v-if="getArgumentLabel(index)">
             {{ getArgumentLabel(index) }}:
@@ -53,12 +75,14 @@
             :node="argument"
             @update="onArgumentUpdate(index, $event)"
             @delete="onArgumentDelete(index)"
+            @convert="onArgumentConvert(index, $event)"
           />
           <AndOperator
             v-else-if="argument.type === 'expression' && argument.operator === 'and'"
             :node="argument"
             @update="onArgumentUpdate(index, $event)"
             @delete="onArgumentDelete(index)"
+            @convert="onArgumentConvert(index, $event)"
           />
           <!-- Recursive component for other nested expressions -->
           <JsonLogicAtom
@@ -77,7 +101,9 @@
               placeholder="Field name (e.g., person.firstName)"
               class="field-name-input-wrapper"
             />
-            <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+            <div class="argument-controls" :class="{ 'is-visible': hoveredArgumentIndex === index }">
+              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+            </div>
           </div>
           
           <!-- Array input -->
@@ -95,7 +121,9 @@
               </div>
               <button @click="addArrayItem(index)" class="add-item-btn">+ Item</button>
             </div>
-            <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+            <div class="argument-controls" :class="{ 'is-visible': hoveredArgumentIndex === index }">
+              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+            </div>
           </div>
           
           <!-- Literal input with type selection -->
@@ -114,7 +142,9 @@
               class="value-input"
               :type="getLiteralInputType(argument)"
             />
-            <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+            <div class="argument-controls" :class="{ 'is-visible': hoveredArgumentIndex === index }">
+              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+            </div>
           </div>
         </div>
         
@@ -139,6 +169,7 @@ import { OPERATORS } from '../types/JsonLogic'
 import FieldNameInput from './FieldNameInput.vue'
 import OrOperator from './OrOperator.vue'
 import AndOperator from './AndOperator.vue'
+import { getConversionOptions, convertOperatorNode } from '../utils/operatorConversion'
 
 interface Props {
   node: JsonLogicNode
@@ -154,6 +185,9 @@ const emit = defineEmits<Emits>()
 
 const localNode = ref<JsonLogicNode>({ ...props.node })
 const isDragging = ref(false)
+const isDirectlyHovered = ref(false)
+const hoveredArgumentIndex = ref<number | null>(null)
+const showConversionMenu = ref(false)
 
 // Watch for external changes
 watch(() => props.node, (newNode) => {
@@ -173,6 +207,11 @@ const canAddMoreArgs = computed(() => {
   if (!currentOperator.value) return false
   const currentArgs = localNode.value.arguments?.length || 0
   return currentArgs < currentOperator.value.maxArgs
+})
+
+const conversionOptions = computed(() => {
+  if (!localNode.value.operator) return []
+  return getConversionOptions(localNode.value.operator)
 })
 
 // Methods
@@ -390,6 +429,22 @@ function onArrayItemUpdate(argumentIndex: number, itemIndex: number, updatedItem
   emit('update', localNode.value)
 }
 
+function onArgumentConvert(index: number, newOperator: string) {
+  if (!localNode.value.arguments) return
+  
+  const argument = localNode.value.arguments[index]
+  if (argument.type !== 'expression') return
+  
+  // Convert the operator while keeping all arguments
+  const convertedArgument = {
+    ...argument,
+    operator: newOperator
+  }
+  
+  localNode.value.arguments[index] = convertedArgument
+  emit('update', localNode.value)
+}
+
 // Drag and drop
 function onDragStart(event: DragEvent) {
   isDragging.value = true
@@ -401,6 +456,51 @@ function onDragStart(event: DragEvent) {
 
 function onDragEnd() {
   isDragging.value = false
+}
+
+// Hover management
+function onMouseEnter(event: MouseEvent) {
+  // Only set hover if this is the direct target, not a child
+  if (event.target === event.currentTarget) {
+    isDirectlyHovered.value = true
+  }
+}
+
+function onMouseLeave() {
+  isDirectlyHovered.value = false
+}
+
+// Argument hover management
+function onArgumentMouseEnter(index: number, event: MouseEvent) {
+  // Check if we're hovering over the argument wrapper itself, not a nested component
+  const target = event.target as HTMLElement
+  const wrapper = event.currentTarget as HTMLElement
+  
+  // Only show controls if hovering directly over the argument content, not nested components
+  if (target === wrapper || wrapper.contains(target)) {
+    const hasNestedComponent = wrapper.querySelector('.json-logic-atom, .or-operator, .and-operator')
+    if (!hasNestedComponent || !hasNestedComponent.contains(target)) {
+      hoveredArgumentIndex.value = index
+    }
+  }
+}
+
+function onArgumentMouseLeave(index: number) {
+  if (hoveredArgumentIndex.value === index) {
+    hoveredArgumentIndex.value = null
+  }
+}
+
+// Conversion functions
+function toggleConversionMenu() {
+  showConversionMenu.value = !showConversionMenu.value
+}
+
+function convertToOperator(newOperator: string) {
+  const convertedNode = convertOperatorNode(localNode.value, newOperator)
+  localNode.value = convertedNode
+  showConversionMenu.value = false
+  emit('update', localNode.value)
 }
 </script>
 
@@ -420,6 +520,15 @@ function onDragEnd() {
   box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
+.json-logic-atom .header-controls {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.json-logic-atom.is-hovered .header-controls {
+  opacity: 1;
+}
+
 .json-logic-atom.is-dragging {
   opacity: 0.5;
   transform: rotate(5deg);
@@ -432,6 +541,68 @@ function onDragEnd() {
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
   border-radius: 6px 6px 0 0;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.conversion-dropdown {
+  position: relative;
+}
+
+.convert-btn {
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.convert-btn:hover {
+  background: #7c3aed;
+}
+
+.conversion-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 120px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.conversion-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.conversion-option:hover {
+  background: #f3f4f6;
+}
+
+.conversion-option:last-child {
+  border-bottom: none;
 }
 
 .drag-handle {
@@ -578,6 +749,15 @@ function onDragEnd() {
   height: 18px;
   cursor: pointer;
   font-size: 10px;
+}
+
+.argument-controls {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.argument-controls.is-visible {
+  opacity: 1;
 }
 
 .delete-arg-btn {

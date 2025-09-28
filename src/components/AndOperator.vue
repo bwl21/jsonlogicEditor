@@ -1,16 +1,36 @@
 <template>
   <div 
     class="and-operator"
-    :class="{ 'is-dragging': isDragging }"
+    :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered }"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
   >
     <!-- Header -->
     <div class="operator-header">
       <div class="drag-handle">⋮⋮</div>
       <span class="operator-label">AND</span>
-      <button @click="$emit('delete')" class="delete-btn" title="Delete">×</button>
+      <div class="header-controls">
+        <div class="conversion-dropdown" v-if="conversionOptions.length > 0">
+          <button @click="toggleConversionMenu" class="convert-btn" title="Convert operator">
+            ⟲
+          </button>
+          <div v-if="showConversionMenu" class="conversion-menu">
+            <button 
+              v-for="option in conversionOptions"
+              :key="option.operator"
+              @click="convertToOperator(option.operator)"
+              class="conversion-option"
+              :title="option.description"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+        <button @click="$emit('delete')" class="delete-btn" title="Delete">×</button>
+      </div>
     </div>
 
     <!-- Vertical Arguments -->
@@ -96,10 +116,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { JsonLogicNode } from '../types/JsonLogic'
 import JsonLogicAtom from './JsonLogicAtom.vue'
 import FieldNameInput from './FieldNameInput.vue'
+import { getConversionOptions, convertOperatorNode } from '../utils/operatorConversion'
 
 interface Props {
   node: JsonLogicNode
@@ -108,6 +129,7 @@ interface Props {
 interface Emits {
   (e: 'update', node: JsonLogicNode): void
   (e: 'delete'): void
+  (e: 'convert', operator: string): void
 }
 
 const props = defineProps<Props>()
@@ -115,11 +137,18 @@ const emit = defineEmits<Emits>()
 
 const localNode = ref<JsonLogicNode>({ ...props.node })
 const isDragging = ref(false)
+const isDirectlyHovered = ref(false)
+const showConversionMenu = ref(false)
 
 // Watch for external changes
 watch(() => props.node, (newNode) => {
   localNode.value = { ...newNode }
 }, { deep: true })
+
+// Computed properties
+const conversionOptions = computed(() => {
+  return getConversionOptions('and')
+})
 
 // Methods
 function generateId(): string {
@@ -231,6 +260,30 @@ function onDragStart(event: DragEvent) {
 function onDragEnd() {
   isDragging.value = false
 }
+
+// Conversion functions
+function toggleConversionMenu() {
+  showConversionMenu.value = !showConversionMenu.value
+}
+
+function convertToOperator(newOperator: string) {
+  const convertedNode = convertOperatorNode(localNode.value, newOperator)
+  localNode.value = convertedNode
+  showConversionMenu.value = false
+  emit('convert', newOperator)
+}
+
+// Hover management
+function onMouseEnter(event: MouseEvent) {
+  // Only set hover if this is the direct target, not a child
+  if (event.target === event.currentTarget) {
+    isDirectlyHovered.value = true
+  }
+}
+
+function onMouseLeave() {
+  isDirectlyHovered.value = false
+}
 </script>
 
 <style scoped>
@@ -242,6 +295,15 @@ function onDragEnd() {
   min-width: 300px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.2s ease;
+}
+
+.and-operator .header-controls {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.and-operator.is-hovered .header-controls {
+  opacity: 1;
 }
 
 .and-operator:hover {
@@ -261,6 +323,12 @@ function onDragEnd() {
   background: #dbeafe;
   border-bottom: 1px solid #3b82f6;
   border-radius: 6px 6px 0 0;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .drag-handle {
@@ -295,6 +363,62 @@ function onDragEnd() {
 
 .delete-btn:hover {
   background: #dc2626;
+}
+
+.conversion-dropdown {
+  position: relative;
+}
+
+.convert-btn {
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.convert-btn:hover {
+  background: #7c3aed;
+}
+
+.conversion-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 120px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.conversion-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.conversion-option:hover {
+  background: #f3f4f6;
+}
+
+.conversion-option:last-child {
+  border-bottom: none;
 }
 
 .and-body {
