@@ -288,18 +288,20 @@ body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
   width: 100%;
-  overflow-x: auto;
+  overflow-x: visible;
 }
 
 .container {
   width: 100%;
   margin: 0 auto;
   padding: 0 20px;
+  overflow: visible;
 }
 
 .container.full-width {
   max-width: none;
   padding: 0;
+  overflow: visible;
 }
 
 .app-header {

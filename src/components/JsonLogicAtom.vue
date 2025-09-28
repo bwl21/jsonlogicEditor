@@ -18,15 +18,18 @@
   <!-- Default atom rendering for all other cases -->
   <div 
     v-else
-    class="json-logic-atom"
-    :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered }"
+    ref="atomRef"
+    class="json-logic-atom resize-handle-container"
+    :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered, 'is-resizing': isResizing, 'is-selected': isSelected }"
     :data-ui-hint="currentOperator?.uiHints?.join(' ')"
     :data-display-mode="displayMode"
+    :style="resizeStyle"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
+    @click.stop="handleSelect"
   >
     <!-- Header with operator and controls -->
     <div class="atom-header" @mouseenter="onPreviewEnter" @mouseleave="onPreviewLeave">
@@ -93,6 +96,15 @@
       </button>
     </div>
 
+    <!-- Resize handles - only horizontal -->
+    <ResizeHandle
+      v-if="displayMode !== 'collapsed'"
+      direction="horizontal"
+      @resize="onHorizontalResize"
+      @resize-start="onResizeStart"
+      @resize-end="onResizeEnd"
+    />
+
     <!-- Preview when collapsed and hovered -->
     <div v-if="displayMode === 'collapsed' && showPreview && localNode.operator" class="preview-popup">
       <div class="preview-content">
@@ -110,7 +122,7 @@
             ... and {{ (localNode.arguments?.length || 0) - 3 }} more
           </div>
         </div>
-      </div>
+    </div>
     </div>
 
     <!-- Arguments -->
@@ -343,7 +355,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import type { JsonLogicNode, JsonLogicOperator } from '../types/JsonLogic'
 import { OPERATORS } from '../types/JsonLogic'
 import FieldNameInput from './FieldNameInput.vue'
@@ -351,30 +363,64 @@ import OrOperator from './OrOperator.vue'
 import AndOperator from './AndOperator.vue'
 import DisplayModeButtons from './DisplayModeButtons.vue'
 import ConversionMenu from './ConversionMenu.vue'
+import ResizeHandle from './ResizeHandle.vue'
 import { getConversionOptions, convertOperatorNode } from '../utils/operatorConversion'
 import { useDisplayMode } from '../composables/useDisplayMode'
 
+
 interface Props {
   node: JsonLogicNode
+  isSelected?: boolean
 }
 
 interface Emits {
   (e: 'update', node: JsonLogicNode): void
   (e: 'delete'): void
   (e: 'convert', operator: string): void
+  (e: 'select'): void
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  isSelected: false
+})
 const emit = defineEmits<Emits>()
 
 const localNode = ref<JsonLogicNode>({ ...props.node })
 const isDragging = ref(false)
 const isDirectlyHovered = ref(false)
+const atomRef = ref<HTMLElement>()
 const hoveredArgumentIndex = ref<number | null>(null)
 const showConversionMenu = ref(false)
 // Display mode management
 const { displayMode, exitFullMode } = useDisplayMode()
 const showPreview = ref(false)
+
+// Simple resize management
+const isResizing = ref(false)
+const currentWidth = ref(0)
+
+function onResizeStart() {
+  isResizing.value = true
+  if (atomRef.value) {
+    currentWidth.value = atomRef.value.getBoundingClientRect().width
+  }
+}
+
+function onResizeEnd() {
+  isResizing.value = false
+}
+
+function onHorizontalResize(delta: { x: number; y: number }) {
+  if (!atomRef.value) return
+  
+  // Add delta to current width (small incremental changes)
+  currentWidth.value = Math.max(200, Math.min(800, currentWidth.value + delta.x))
+  atomRef.value.style.width = `${currentWidth.value}px`
+}
+
+const resizeStyle = computed(() => {
+  return {} // Let CSS handle default sizing
+})
 
 // Watch for external changes
 watch(() => props.node, (newNode) => {
@@ -726,6 +772,15 @@ function getPreviewText(argument: JsonLogicNode): string {
   }
   return 'condition'
 }
+
+function handleSelect() {
+  emit('select')
+}
+
+// Cleanup on unmount
+onUnmounted(() => {
+  // No cleanup needed for simple resize
+})
 </script>
 
 <style scoped>
@@ -734,12 +789,61 @@ function getPreviewText(argument: JsonLogicNode): string {
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   background: white;
-  margin: 8px 0;
+  margin: 8px 2px 8px 0;
   min-width: 200px;
-  width: 100%;
+  max-width: calc(100% - 4px);
+  width: auto;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.2s ease;
   overflow: visible;
+}
+
+.json-logic-atom.is-resizing {
+  user-select: none;
+  pointer-events: auto;
+  z-index: 1000;
+  position: relative;
+}
+
+.json-logic-atom.is-selected {
+  border: 2px solid #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.json-logic-atom .atom-body {
+  padding: 12px;
+  overflow: visible;
+  height: auto;
+  box-sizing: border-box;
+}
+
+/* Responsive behavior */
+@media (max-width: 768px) {
+  .json-logic-atom {
+    min-width: 150px;
+    margin: 4px 0;
+  }
+  
+  .json-logic-atom[data-display-mode="inplace"] {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .json-logic-atom {
+    min-width: 120px;
+    font-size: 14px;
+  }
+  
+  .atom-header {
+    padding: 6px 8px;
+  }
+  
+  .operator-button {
+    font-size: 12px;
+    padding: 3px 8px;
+  }
 }
 
 /* Collapsed state - compact horizontal and vertical */

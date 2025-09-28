@@ -1,5 +1,5 @@
 <template>
-  <div class="json-logic-editor">
+  <div class="json-logic-editor" @click="clearSelection">
     <div class="editor-header">
       <div class="header-title">
         <h2>JsonLogic Visual Editor</h2>
@@ -32,9 +32,55 @@
           <button @click="exportJson" class="export-btn">Export JSON</button>
           <button @click="importJson" class="import-btn">Import JSON</button>
           <button @click="clearAll" class="clear-btn">Clear All</button>
-          <button @click="toggleDebugInfo" class="debug-btn" :class="{ active: showDebugInfo }">
-            🐛 Debug
-          </button>
+          <div class="debug-dropdown">
+            <button @click="toggleDebugInfo" class="debug-btn" :class="{ active: showDebugInfo }">
+              🐛 Debug
+            </button>
+            
+            <!-- Debug Popup -->
+            <div v-if="showDebugInfo" class="debug-popup">
+              <div class="debug-popup-header">
+                <h4>Undo/Redo Debug</h4>
+                <button @click="showDebugInfo = false" class="close-debug-btn">×</button>
+              </div>
+              
+              <div class="debug-stats">
+                <div class="debug-stat">
+                  <label>History:</label>
+                  <span>{{ debugStats.current + 1 }} / {{ debugStats.total }} (max: {{ debugStats.maxSize }})</span>
+                </div>
+                <div class="debug-stat">
+                  <label>Storage:</label>
+                  <span>{{ Math.round(debugStats.storageSize / 1024) }} KB</span>
+                </div>
+                <div class="debug-stat">
+                  <label>Can Undo:</label>
+                  <span :class="{ 'status-yes': debugStats.canUndo, 'status-no': !debugStats.canUndo }">
+                    {{ debugStats.canUndo ? 'Yes' : 'No' }}
+                  </span>
+                </div>
+                <div class="debug-stat">
+                  <label>Can Redo:</label>
+                  <span :class="{ 'status-yes': debugStats.canRedo, 'status-no': !debugStats.canRedo }">
+                    {{ debugStats.canRedo ? 'Yes' : 'No' }}
+                  </span>
+                </div>
+                <div class="debug-stat">
+                  <label>Current:</label>
+                  <span>{{ undoRedoManager.getCurrentDescription() }}</span>
+                </div>
+              </div>
+              
+              <div class="debug-actions">
+                <button @click="undoRedoManager.clearHistory(); updateUndoRedoState()" class="debug-clear-btn">
+                  Clear History
+                </button>
+                <button @click="runUndoRedoTest" class="debug-test-btn">
+                  Run Test
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -64,67 +110,36 @@
           v-for="rule in orRules"
           :key="rule.id"
           :node="rule"
+          :is-selected="isComponentSelected(rule.id)"
           @update="onRuleUpdate(rules.findIndex(r => r.id === rule.id), $event)"
           @delete="onRuleDelete(rules.findIndex(r => r.id === rule.id))"
           @convert="onRuleConvert(rules.findIndex(r => r.id === rule.id), $event)"
+          @select="selectComponent(rule.id)"
         />
         <AndOperator
           v-for="rule in andRules"
           :key="rule.id"
           :node="rule"
+          :is-selected="isComponentSelected(rule.id)"
           @update="onRuleUpdate(rules.findIndex(r => r.id === rule.id), $event)"
           @delete="onRuleDelete(rules.findIndex(r => r.id === rule.id))"
           @convert="onRuleConvert(rules.findIndex(r => r.id === rule.id), $event)"
+          @select="selectComponent(rule.id)"
         />
         <!-- Generic component for other operators -->
         <JsonLogicAtom
           v-for="rule in otherRules"
           :key="rule.id"
           :node="rule"
+          :is-selected="isComponentSelected(rule.id)"
           @update="onRuleUpdate(rules.findIndex(r => r.id === rule.id), $event)"
           @delete="onRuleDelete(rules.findIndex(r => r.id === rule.id))"
+          @select="selectComponent(rule.id)"
         />
       </div>
     </div>
 
-    <!-- Debug Panel -->
-    <div v-if="showDebugInfo" class="debug-panel">
-      <h3>Undo/Redo Debug Information</h3>
-      <div class="debug-stats">
-        <div class="debug-stat">
-          <label>History Size:</label>
-          <span>{{ debugStats.current + 1 }} / {{ debugStats.total }} (max: {{ debugStats.maxSize }})</span>
-        </div>
-        <div class="debug-stat">
-          <label>Storage Size:</label>
-          <span>{{ Math.round(debugStats.storageSize / 1024) }} KB</span>
-        </div>
-        <div class="debug-stat">
-          <label>Can Undo:</label>
-          <span :class="{ 'status-yes': debugStats.canUndo, 'status-no': !debugStats.canUndo }">
-            {{ debugStats.canUndo ? 'Yes' : 'No' }}
-          </span>
-        </div>
-        <div class="debug-stat">
-          <label>Can Redo:</label>
-          <span :class="{ 'status-yes': debugStats.canRedo, 'status-no': !debugStats.canRedo }">
-            {{ debugStats.canRedo ? 'Yes' : 'No' }}
-          </span>
-        </div>
-        <div class="debug-stat">
-          <label>Current State:</label>
-          <span>{{ undoRedoManager.getCurrentDescription() }}</span>
-        </div>
-      </div>
-      <div class="debug-actions">
-        <button @click="undoRedoManager.clearHistory(); updateUndoRedoState()" class="debug-clear-btn">
-          Clear History
-        </button>
-        <button @click="runUndoRedoTest" class="debug-test-btn">
-          Run Test
-        </button>
-      </div>
-    </div>
+
 
     <!-- JSON Output Panel -->
     <div class="output-panel" v-if="showOutput">
@@ -175,6 +190,7 @@ const isDragOver = ref(false)
 const showOutput = ref(false)
 const showImportModal = ref(false)
 const importText = ref('')
+const selectedComponentId = ref<string | null>(null)
 
 // Undo/Redo state
 const canUndo = ref(false)
@@ -412,6 +428,19 @@ function onDrop(event: DragEvent) {
       console.error('Failed to parse dropped data:', error)
     }
   }
+}
+
+// Selection management
+function selectComponent(componentId: string) {
+  selectedComponentId.value = componentId
+}
+
+function clearSelection() {
+  selectedComponentId.value = null
+}
+
+function isComponentSelected(componentId: string): boolean {
+  return selectedComponentId.value === componentId
 }
 
 // JSON Export/Import
@@ -662,6 +691,16 @@ onUnmounted(() => {
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   box-sizing: border-box;
+  overflow-x: auto;
+}
+
+/* Prevent interference during resize operations */
+.json-logic-editor:has(.is-resizing) {
+  pointer-events: none;
+}
+
+.json-logic-editor:has(.is-resizing) .is-resizing {
+  pointer-events: auto;
 }
 
 .editor-header {
@@ -822,6 +861,153 @@ onUnmounted(() => {
   background: #047857;
 }
 
+.debug-dropdown {
+  position: relative;
+}
+
+.debug-popup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 2px solid #6b7280;
+  border-radius: 8px;
+  box-shadow: 0 8px 25px rgba(107, 114, 128, 0.15);
+  z-index: 1000;
+  min-width: 280px;
+  max-width: 400px;
+  backdrop-filter: blur(10px);
+  margin-top: 8px;
+}
+
+.debug-popup::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  right: 20px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid #6b7280;
+}
+
+.debug-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 6px 6px 0 0;
+}
+
+.debug-popup-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.close-debug-btn {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.close-debug-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.debug-popup .debug-stats {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.debug-popup .debug-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: #f9fafb;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+}
+
+.debug-popup .debug-stat label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 12px;
+}
+
+.debug-popup .debug-stat span {
+  font-family: monospace;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.debug-popup .status-yes {
+  color: #059669 !important;
+  font-weight: 600;
+}
+
+.debug-popup .status-no {
+  color: #dc2626 !important;
+  font-weight: 600;
+}
+
+.debug-popup .debug-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0 0 6px 6px;
+}
+
+.debug-popup .debug-clear-btn,
+.debug-popup .debug-test-btn {
+  flex: 1;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.debug-popup .debug-clear-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.debug-popup .debug-clear-btn:hover {
+  background: #dc2626;
+}
+
+.debug-popup .debug-test-btn {
+  background: #3b82f6;
+  color: white;
+}
+
+.debug-popup .debug-test-btn:hover {
+  background: #2563eb;
+}
+
 .editor-canvas {
   min-height: 400px;
   border: 2px dashed #d1d5db;
@@ -829,6 +1015,7 @@ onUnmounted(() => {
   padding: 20px;
   background: #f9fafb;
   transition: all 0.2s ease;
+  overflow: visible;
 }
 
 .editor-canvas.drag-over {
@@ -857,8 +1044,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 16px;
   width: 100%;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: visible;
   padding-bottom: 10px;
 }
 
@@ -1028,92 +1214,5 @@ onUnmounted(() => {
   color: white;
 }
 
-.debug-panel {
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 20px;
-  margin: 20px 0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
 
-.debug-panel h3 {
-  margin: 0 0 16px 0;
-  color: #374151;
-  font-size: 16px;
-}
-
-.debug-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.debug-stat {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: #f9fafb;
-  border-radius: 6px;
-  border: 1px solid #e5e7eb;
-}
-
-.debug-stat label {
-  font-weight: 600;
-  color: #374151;
-  font-size: 13px;
-}
-
-.debug-stat span {
-  font-family: monospace;
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.status-yes {
-  color: #059669 !important;
-  font-weight: 600;
-}
-
-.status-no {
-  color: #dc2626 !important;
-  font-weight: 600;
-}
-
-.debug-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.debug-clear-btn {
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background 0.2s ease;
-}
-
-.debug-clear-btn:hover {
-  background: #dc2626;
-}
-
-.debug-test-btn {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background 0.2s ease;
-}
-
-.debug-test-btn:hover {
-  background: #2563eb;
-}
 </style>

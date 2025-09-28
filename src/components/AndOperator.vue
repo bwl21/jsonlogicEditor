@@ -1,13 +1,16 @@
 <template>
   <div 
-    class="and-operator"
-    :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered }"
+    ref="operatorRef"
+    class="and-operator resize-handle-container"
+    :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered, 'is-resizing': isResizing, 'is-selected': isSelected }"
     :data-display-mode="displayMode"
+    :style="resizeStyle"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
+    @click.stop="$emit('select')"
   >
     <!-- Header -->
     <div class="operator-header" @mouseenter="onPreviewEnter" @mouseleave="onPreviewLeave">
@@ -76,8 +79,10 @@
             <JsonLogicAtom
               v-if="argument.type === 'expression'"
               :node="argument"
+              :is-selected="isSelected"
               @update="onArgumentUpdate(index, $event)"
               @delete="onArgumentDelete(index)"
+              @select="$emit('select')"
             />
             
             <!-- Variable input -->
@@ -132,15 +137,25 @@
           <!-- AND Badge (except for last item) -->
           <div v-if="localNode.arguments && index < localNode.arguments.length - 1" class="and-badge">AND</div>
         </div>
-        
-        <!-- Add new condition button -->
-        <div class="add-condition-wrapper">
-          <button @click="addArgument" class="add-condition-btn">
-            + Add Condition
-          </button>
-        </div>
+      </div>
+      
+      <!-- Add new condition button - outside scrollable area -->
+      <div class="add-condition-wrapper">
+        <button @click="addArgument" class="add-condition-btn">
+          + Add Condition
+        </button>
       </div>
     </div>
+
+    <!-- Resize handles -->
+    <!-- Resize handles - only horizontal -->
+    <ResizeHandle
+      v-if="displayMode !== 'collapsed'"
+      direction="horizontal"
+      @resize="onHorizontalResize"
+      @resize-start="onResizeStart"
+      @resize-end="onResizeEnd"
+    />
   </div>
 
   <!-- Full-screen overlay -->
@@ -169,8 +184,10 @@
             <JsonLogicAtom
               v-if="argument.type === 'expression'"
               :node="argument"
+              :is-selected="isSelected"
               @update="onArgumentUpdate(index, $event)"
               @delete="onArgumentDelete(index)"
+              @select="$emit('select')"
             />
             
             <!-- Variable input -->
@@ -240,20 +257,26 @@ import JsonLogicAtom from './JsonLogicAtom.vue'
 import FieldNameInput from './FieldNameInput.vue'
 import DisplayModeButtons from './DisplayModeButtons.vue'
 import ConversionMenu from './ConversionMenu.vue'
+import ResizeHandle from './ResizeHandle.vue'
 import { getConversionOptions, convertOperatorNode } from '../utils/operatorConversion'
 import { useDisplayMode } from '../composables/useDisplayMode'
 
+
 interface Props {
   node: JsonLogicNode
+  isSelected?: boolean
 }
 
 interface Emits {
   (e: 'update', node: JsonLogicNode): void
   (e: 'delete'): void
   (e: 'convert', operator: string): void
+  (e: 'select'): void
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  isSelected: false
+})
 const emit = defineEmits<Emits>()
 
 const localNode = ref<JsonLogicNode>({ ...props.node })
@@ -261,9 +284,37 @@ const isDragging = ref(false)
 const isDirectlyHovered = ref(false)
 const showConversionMenu = ref(false)
 const showPreview = ref(false)
+const operatorRef = ref<HTMLElement>()
 
 // Display mode management
 const { displayMode, exitFullMode } = useDisplayMode()
+
+// Simple resize management
+const isResizing = ref(false)
+const currentWidth = ref(0)
+
+function onResizeStart() {
+  isResizing.value = true
+  if (operatorRef.value) {
+    currentWidth.value = operatorRef.value.getBoundingClientRect().width
+  }
+}
+
+function onResizeEnd() {
+  isResizing.value = false
+}
+
+function onHorizontalResize(delta: { x: number; y: number }) {
+  if (!operatorRef.value) return
+  
+  // Add delta to current width (small incremental changes)
+  currentWidth.value = Math.max(300, Math.min(1200, currentWidth.value + delta.x))
+  operatorRef.value.style.width = `${currentWidth.value}px`
+}
+
+const resizeStyle = computed(() => {
+  return {} // Let CSS handle default sizing
+})
 
 // Watch for external changes
 watch(() => props.node, (newNode) => {
@@ -426,6 +477,8 @@ function getPreviewText(argument: JsonLogicNode): string {
   return 'condition'
 }
 
+
+
 // Hover management
 function onMouseEnter(event: MouseEvent) {
   // Only set hover if this is the direct target, not a child
@@ -447,12 +500,70 @@ function onMouseLeave() {
   border: 2px solid #3b82f6;
   border-radius: 8px;
   background: white;
-  margin: 8px 0;
+  margin: 8px 2px 8px 0;
   min-width: 300px;
-  width: 100%;
+  max-width: calc(100% - 4px);
+  width: auto;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.2s ease;
   overflow: visible;
+}
+
+.and-operator.is-resizing {
+  user-select: none;
+  pointer-events: auto;
+  z-index: 1000;
+  position: relative;
+}
+
+.and-operator.is-selected {
+  border: 2px solid #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.and-operator .and-body {
+  padding: 16px;
+  padding-right: 8px; /* Space for resize handle */
+  overflow: visible;
+  height: auto;
+  box-sizing: border-box;
+}
+
+/* Responsive behavior */
+@media (max-width: 768px) {
+  .and-operator {
+    min-width: 200px;
+    margin: 4px 0;
+  }
+  
+  .and-operator[data-display-mode="inplace"] {
+    width: 100%;
+    max-width: none;
+  }
+  
+  .and-arguments {
+    gap: 8px;
+  }
+  
+  .and-argument {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .and-operator {
+    min-width: 150px;
+    font-size: 14px;
+  }
+  
+  .operator-header {
+    padding: 6px 8px;
+  }
+  
+  .operator-button {
+    font-size: 12px;
+    padding: 3px 8px;
+  }
 }
 
 /* Collapsed state - compact horizontal */
@@ -641,9 +752,9 @@ function onMouseLeave() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: visible;
   padding-bottom: 10px;
+  height: auto;
 }
 
 .and-arguments::-webkit-scrollbar {
@@ -770,7 +881,9 @@ function onMouseLeave() {
 .add-condition-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 8px;
+  margin-top: 12px;
+  margin-bottom: 8px;
+  padding-right: 8px; /* Space for resize handle */
 }
 
 .add-condition-btn {
