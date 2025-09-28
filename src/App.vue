@@ -264,8 +264,9 @@ function loadExample(example: any) {
   showExamples.value = false
   // Wait for editor to be mounted, then load the example
   setTimeout(() => {
-    if (editor.value) {
-      // This would need to be implemented in the JsonLogicEditor component
+    if (editor.value && editor.value.loadJsonLogic) {
+      editor.value.loadJsonLogic(example.jsonLogic)
+    } else {
       console.log('Loading example:', example.jsonLogic)
     }
   }, 100)

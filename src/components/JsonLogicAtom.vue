@@ -1,5 +1,23 @@
 <template>
+  <!-- Render as OrOperator if root operator is 'or' -->
+  <OrOperator
+    v-if="localNode.type === 'expression' && localNode.operator === 'or'"
+    :node="localNode"
+    @update="$emit('update', $event)"
+    @delete="$emit('delete')"
+    @convert="$emit('convert', $event)"
+  />
+  <!-- Render as AndOperator if root operator is 'and' -->
+  <AndOperator
+    v-else-if="localNode.type === 'expression' && localNode.operator === 'and'"
+    :node="localNode"
+    @update="$emit('update', $event)"
+    @delete="$emit('delete')"
+    @convert="$emit('convert', $event)"
+  />
+  <!-- Default atom rendering for all other cases -->
   <div 
+    v-else
     class="json-logic-atom"
     :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered }"
     :data-ui-hint="currentOperator?.uiHints?.join(' ')"
@@ -49,8 +67,9 @@
       
       <div class="header-controls">
         <div class="conversion-dropdown" v-if="conversionOptions.length > 0">
-          <button @click="toggleConversionMenu" class="convert-btn" title="Convert operator">
-            ⟲
+          <button @click="toggleConversionMenu" class="convert-btn" :title="showConversionMenu ? 'Close conversion menu' : `Convert ${localNode.operator || 'operator'} to different type`">
+            <span class="convert-icon">⟲</span>
+            <span class="convert-label">Convert</span>
           </button>
           <div v-if="showConversionMenu" class="conversion-menu">
             <button 
@@ -58,13 +77,17 @@
               :key="option.operator"
               @click="convertToOperator(option.operator)"
               class="conversion-option"
-              :title="option.description"
+              :title="`Convert to ${option.label}: ${option.description}`"
             >
-              {{ option.label }}
+              <span class="option-label">{{ option.label }}</span>
+              <span class="option-category">({{ option.category }})</span>
             </button>
           </div>
         </div>
-        <button @click="$emit('delete')" class="delete-btn" title="Delete">×</button>
+        <button @click="$emit('delete')" class="delete-btn" :title="`Delete this ${localNode.operator || 'operator'}`">
+          <span class="delete-icon">×</span>
+          <span class="delete-label">Delete</span>
+        </button>
       </div>
     </div>
 
@@ -211,6 +234,7 @@ interface Props {
 interface Emits {
   (e: 'update', node: JsonLogicNode): void
   (e: 'delete'): void
+  (e: 'convert', operator: string): void
 }
 
 const props = defineProps<Props>()
@@ -612,7 +636,8 @@ function getPreviewText(argument: JsonLogicNode): string {
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
+  margin-left: auto;
 }
 
 .conversion-dropdown {
@@ -623,18 +648,37 @@ function getPreviewText(argument: JsonLogicNode): string {
   background: #8b5cf6;
   color: white;
   border: none;
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
+  border-radius: 6px;
+  padding: 8px 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
   display: flex;
   align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  min-width: 90px;
   justify-content: center;
 }
 
 .convert-btn:hover {
   background: #7c3aed;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+.convert-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
+}
+
+.convert-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.convert-label {
+  font-size: 12px;
 }
 
 .conversion-menu {
@@ -642,33 +686,68 @@ function getPreviewText(argument: JsonLogicNode): string {
   top: 100%;
   right: 0;
   background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border: 2px solid #64748b;
+  border-radius: 8px;
+  box-shadow: 0 8px 25px rgba(100, 116, 139, 0.15);
   z-index: 1000;
-  min-width: 120px;
-  max-height: 200px;
+  min-width: 160px;
+  max-height: 250px;
   overflow-y: auto;
+  backdrop-filter: blur(10px);
+}
+
+.conversion-menu::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  right: 20px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid #64748b;
 }
 
 .conversion-option {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 14px;
   text-align: left;
   border: none;
   background: none;
   cursor: pointer;
   font-size: 12px;
   border-bottom: 1px solid #f3f4f6;
+  transition: background 0.2s ease;
 }
 
 .conversion-option:hover {
-  background: #f3f4f6;
+  background: #f1f5f9;
+  transform: translateX(4px);
+}
+
+.conversion-option:active {
+  background: #e2e8f0;
+  transform: translateX(2px);
 }
 
 .conversion-option:last-child {
   border-bottom: none;
+}
+
+.option-label {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 2px;
+}
+
+.option-category {
+  font-size: 10px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .drag-handle {
@@ -694,16 +773,37 @@ function getPreviewText(argument: JsonLogicNode): string {
   background: #ef4444;
   color: white;
   border: none;
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
+  border-radius: 6px;
+  padding: 8px 12px;
   cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  min-width: 80px;
+  justify-content: center;
 }
 
 .delete-btn:hover {
   background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.delete-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.delete-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.delete-label {
+  font-size: 12px;
 }
 
 .atom-body {
@@ -899,19 +999,26 @@ function getPreviewText(argument: JsonLogicNode): string {
 }
 
 .collapse-btn {
-  background: none;
-  border: none;
+  background: rgba(100, 116, 139, 0.1);
+  border: 1px solid rgba(100, 116, 139, 0.2);
   color: #64748b;
   cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  margin-right: 8px;
-  transition: background-color 0.2s ease;
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-right: 12px;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .collapse-btn:hover {
-  background: rgba(100, 116, 139, 0.1);
+  background: rgba(100, 116, 139, 0.2);
+  border-color: rgba(100, 116, 139, 0.3);
+  transform: translateY(-1px);
 }
 
 .condition-count {
@@ -977,18 +1084,38 @@ function getPreviewText(argument: JsonLogicNode): string {
     overflow-x: visible;
   }
   
+  .header-controls {
+    gap: 12px;
+  }
+  
   .collapse-btn {
     font-size: 14px;
-    padding: 4px 8px;
+    padding: 8px 12px;
+    min-width: 40px;
+  }
+  
+  .convert-btn, .delete-btn {
+    padding: 10px 14px;
+    min-width: 100px;
+    font-size: 14px;
+  }
+  
+  .convert-label, .delete-label {
+    font-size: 13px;
   }
   
   .condition-count {
-    font-size: 11px;
+    font-size: 12px;
   }
   
   .operator-select {
-    min-width: 120px;
-    font-size: 12px;
+    min-width: 140px;
+    font-size: 13px;
+  }
+  
+  .conversion-menu {
+    min-width: 180px;
+    right: -10px;
   }
 }
 </style>

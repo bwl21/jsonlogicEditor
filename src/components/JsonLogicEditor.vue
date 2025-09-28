@@ -1,12 +1,41 @@
 <template>
   <div class="json-logic-editor">
     <div class="editor-header">
-      <h2>JsonLogic Visual Editor</h2>
+      <div class="header-title">
+        <h2>JsonLogic Visual Editor</h2>
+        <div class="keyboard-shortcuts">
+          <span class="shortcut-hint">Ctrl+Z: Undo | Ctrl+Y / Ctrl+Shift+Z: Redo</span>
+          <span v-if="isUndoRedoOperation" class="operation-indicator">⟳ Processing...</span>
+        </div>
+      </div>
       <div class="header-controls">
-        <button @click="addNewRule" class="add-rule-btn">+ Add Rule</button>
-        <button @click="exportJson" class="export-btn">Export JSON</button>
-        <button @click="importJson" class="import-btn">Import JSON</button>
-        <button @click="clearAll" class="clear-btn">Clear All</button>
+        <div class="undo-redo-group">
+          <button 
+            @click="performUndo" 
+            :disabled="!canUndo"
+            :title="canUndo ? `Undo: ${undoDescription}` : 'Nothing to undo'"
+            class="undo-btn"
+          >
+            ↶ Undo
+          </button>
+          <button 
+            @click="performRedo" 
+            :disabled="!canRedo"
+            :title="canRedo ? `Redo: ${redoDescription}` : 'Nothing to redo'"
+            class="redo-btn"
+          >
+            ↷ Redo
+          </button>
+        </div>
+        <div class="editor-actions">
+          <button @click="addNewRule" class="add-rule-btn">+ Add Rule</button>
+          <button @click="exportJson" class="export-btn">Export JSON</button>
+          <button @click="importJson" class="import-btn">Import JSON</button>
+          <button @click="clearAll" class="clear-btn">Clear All</button>
+          <button @click="toggleDebugInfo" class="debug-btn" :class="{ active: showDebugInfo }">
+            🐛 Debug
+          </button>
+        </div>
       </div>
     </div>
 
@@ -58,6 +87,45 @@
       </div>
     </div>
 
+    <!-- Debug Panel -->
+    <div v-if="showDebugInfo" class="debug-panel">
+      <h3>Undo/Redo Debug Information</h3>
+      <div class="debug-stats">
+        <div class="debug-stat">
+          <label>History Size:</label>
+          <span>{{ debugStats.current + 1 }} / {{ debugStats.total }} (max: {{ debugStats.maxSize }})</span>
+        </div>
+        <div class="debug-stat">
+          <label>Storage Size:</label>
+          <span>{{ Math.round(debugStats.storageSize / 1024) }} KB</span>
+        </div>
+        <div class="debug-stat">
+          <label>Can Undo:</label>
+          <span :class="{ 'status-yes': debugStats.canUndo, 'status-no': !debugStats.canUndo }">
+            {{ debugStats.canUndo ? 'Yes' : 'No' }}
+          </span>
+        </div>
+        <div class="debug-stat">
+          <label>Can Redo:</label>
+          <span :class="{ 'status-yes': debugStats.canRedo, 'status-no': !debugStats.canRedo }">
+            {{ debugStats.canRedo ? 'Yes' : 'No' }}
+          </span>
+        </div>
+        <div class="debug-stat">
+          <label>Current State:</label>
+          <span>{{ undoRedoManager.getCurrentDescription() }}</span>
+        </div>
+      </div>
+      <div class="debug-actions">
+        <button @click="undoRedoManager.clearHistory(); updateUndoRedoState()" class="debug-clear-btn">
+          Clear History
+        </button>
+        <button @click="runUndoRedoTest" class="debug-test-btn">
+          Run Test
+        </button>
+      </div>
+    </div>
+
     <!-- JSON Output Panel -->
     <div class="output-panel" v-if="showOutput">
       <div class="panel-header">
@@ -95,17 +163,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import JsonLogicAtom from './JsonLogicAtom.vue'
 import OrOperator from './OrOperator.vue'
 import AndOperator from './AndOperator.vue'
 import type { JsonLogicNode } from '../types/JsonLogic'
+import { undoRedoManager } from '../utils/undoRedoManager'
 
 const rules = ref<JsonLogicNode[]>([])
 const isDragOver = ref(false)
 const showOutput = ref(false)
 const showImportModal = ref(false)
 const importText = ref('')
+
+// Undo/Redo state
+const canUndo = ref(false)
+const canRedo = ref(false)
+const undoDescription = ref('')
+const redoDescription = ref('')
+const isUndoRedoOperation = ref(false)
+const showDebugInfo = ref(false)
+let saveStateTimeout: number | null = null
 
 // Computed properties
 const formattedJson = computed(() => {
@@ -125,11 +203,65 @@ const orRules = computed(() => rules.value.filter(r => r.operator === 'or'))
 const andRules = computed(() => rules.value.filter(r => r.operator === 'and'))
 const otherRules = computed(() => rules.value.filter(r => r.operator !== 'or' && r.operator !== 'and'))
 
+const debugStats = computed(() => undoRedoManager.getHistoryStats())
+
 // Watch for operator changes to force re-render
 watch(rules, () => {
   // Force reactivity update when rules change
   nextTick()
+  
+  // Save state for undo/redo (with debouncing for general edits)
+  if (!isUndoRedoOperation.value) {
+    saveCurrentStateDebounced('Edit rules', 1000)
+  }
 }, { deep: true })
+
+// Update undo/redo button states
+function updateUndoRedoState() {
+  canUndo.value = undoRedoManager.canUndo()
+  canRedo.value = undoRedoManager.canRedo()
+  undoDescription.value = undoRedoManager.getUndoDescription()
+  redoDescription.value = undoRedoManager.getRedoDescription()
+}
+
+function toggleDebugInfo() {
+  showDebugInfo.value = !showDebugInfo.value
+}
+
+function runUndoRedoTest() {
+  console.log('🧪 Running Undo/Redo Test...')
+  
+  // Clear existing rules
+  rules.value = []
+  saveCurrentState('Test: Clear all')
+  
+  // Add first rule
+  addNewRule()
+  console.log('✅ Added first rule')
+  
+  // Add second rule
+  addNewRule()
+  console.log('✅ Added second rule')
+  
+  // Test undo
+  performUndo()
+  console.log('↶ Undid last action - should have 1 rule:', rules.value.length === 1 ? '✅' : '❌')
+  
+  // Test undo again
+  performUndo()
+  console.log('↶ Undid again - should have 0 rules:', rules.value.length === 0 ? '✅' : '❌')
+  
+  // Test redo
+  performRedo()
+  console.log('↷ Redid action - should have 1 rule:', rules.value.length === 1 ? '✅' : '❌')
+  
+  // Test redo again
+  performRedo()
+  console.log('↷ Redid again - should have 2 rules:', rules.value.length === 2 ? '✅' : '❌')
+  
+  console.log('🧪 Test completed! Check console for results.')
+  alert('Undo/Redo test completed! Check browser console for detailed results.')
+}
 
 // Methods
 function generateId(): string {
@@ -145,14 +277,89 @@ function addNewRule() {
   }
   
   rules.value.push(newRule)
+  saveCurrentState('Add new rule')
+}
+
+// Undo/Redo functions
+function saveCurrentState(description: string) {
+  undoRedoManager.saveState(rules.value, description)
+  updateUndoRedoState()
+}
+
+function saveCurrentStateDebounced(description: string, delay: number = 500) {
+  if (saveStateTimeout) {
+    clearTimeout(saveStateTimeout)
+  }
+  
+  saveStateTimeout = window.setTimeout(() => {
+    saveCurrentState(description)
+    saveStateTimeout = null
+  }, delay)
+}
+
+function performUndo() {
+  try {
+    const previousState = undoRedoManager.undo()
+    if (previousState) {
+      isUndoRedoOperation.value = true
+      rules.value = previousState.rules
+      updateUndoRedoState()
+      
+      // Reset flag after Vue updates
+      nextTick(() => {
+        isUndoRedoOperation.value = false
+      })
+      
+      console.log('↶ Undo successful:', previousState.description)
+    }
+  } catch (error) {
+    console.error('Undo failed:', error)
+    isUndoRedoOperation.value = false
+  }
+}
+
+function performRedo() {
+  try {
+    const nextState = undoRedoManager.redo()
+    if (nextState) {
+      isUndoRedoOperation.value = true
+      rules.value = nextState.rules
+      updateUndoRedoState()
+      
+      // Reset flag after Vue updates
+      nextTick(() => {
+        isUndoRedoOperation.value = false
+      })
+      
+      console.log('↷ Redo successful:', nextState.description)
+    }
+  } catch (error) {
+    console.error('Redo failed:', error)
+    isUndoRedoOperation.value = false
+  }
 }
 
 function onRuleUpdate(index: number, updatedRule: JsonLogicNode) {
+  const oldRule = rules.value[index]
   rules.value[index] = updatedRule
+  
+  // Don't save state during undo/redo operations
+  if (!isUndoRedoOperation.value) {
+    // Determine what changed for better description
+    let description = 'Update rule'
+    if (oldRule.operator !== updatedRule.operator) {
+      description = `Change operator to ${updatedRule.operator}`
+    } else if (oldRule.arguments?.length !== updatedRule.arguments?.length) {
+      description = 'Modify arguments'
+    }
+    
+    saveCurrentState(description)
+  }
 }
 
 function onRuleDelete(index: number) {
   rules.value.splice(index, 1)
+  saveCurrentState('Delete rule')
 }
 
 function onRuleConvert(index: number, newOperator: string) {
@@ -165,11 +372,13 @@ function onRuleConvert(index: number, newOperator: string) {
   }
   
   rules.value[index] = convertedRule
+  saveCurrentState(`Convert to ${newOperator}`)
 }
 
 function clearAll() {
   if (confirm('Are you sure you want to clear all rules?')) {
     rules.value = []
+    saveCurrentState('Clear all rules')
   }
 }
 
@@ -198,6 +407,7 @@ function onDrop(event: DragEvent) {
       // Add as new rule if dropped on canvas
       const newRule = { ...droppedNode, id: generateId() }
       rules.value.push(newRule)
+      saveCurrentState('Drop rule')
     } catch (error) {
       console.error('Failed to parse dropped data:', error)
     }
@@ -226,6 +436,7 @@ function processImport() {
     }
     
     showImportModal.value = false
+    saveCurrentState('Import JSON')
   } catch (error) {
     alert('Invalid JSON format. Please check your input.')
   }
@@ -368,6 +579,80 @@ function convertFromJsonLogic(json: any): JsonLogicNode {
     value: JSON.stringify(json)
   }
 }
+
+// Keyboard shortcuts
+function handleKeydown(event: KeyboardEvent) {
+  // Check if we're in an input field - don't interfere with normal typing
+  const target = event.target as HTMLElement
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+    return
+  }
+  
+  const isCtrlOrCmd = event.ctrlKey || event.metaKey
+  
+  // Ctrl+Z or Cmd+Z for undo (without Shift)
+  if (isCtrlOrCmd && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+    event.preventDefault()
+    performUndo()
+    return
+  }
+  
+  // Ctrl+Y or Cmd+Y for redo
+  if (isCtrlOrCmd && event.key.toLowerCase() === 'y') {
+    event.preventDefault()
+    performRedo()
+    return
+  }
+  
+  // Ctrl+Shift+Z or Cmd+Shift+Z for redo (alternative)
+  if (isCtrlOrCmd && event.key.toLowerCase() === 'z' && event.shiftKey) {
+    event.preventDefault()
+    performRedo()
+    return
+  }
+}
+
+// Public methods for parent component
+function loadJsonLogic(jsonLogic: any) {
+  try {
+    const converted = convertFromJsonLogic(jsonLogic)
+    
+    if (Array.isArray(converted)) {
+      rules.value = converted
+    } else {
+      rules.value = [converted]
+    }
+    
+    saveCurrentState('Load example')
+    console.log('Loaded example with rules:', rules.value)
+  } catch (error) {
+    console.error('Failed to load JsonLogic example:', error)
+  }
+}
+
+// Expose methods to parent
+defineExpose({
+  loadJsonLogic
+})
+
+// Lifecycle hooks
+onMounted(() => {
+  // Add keyboard event listener
+  document.addEventListener('keydown', handleKeydown)
+  
+  // Initialize undo/redo state
+  updateUndoRedoState()
+  
+  // Save initial state if rules exist
+  if (rules.value.length > 0) {
+    saveCurrentState('Initial state')
+  }
+})
+
+onUnmounted(() => {
+  // Remove keyboard event listener
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <style scoped>
@@ -388,14 +673,91 @@ function convertFromJsonLogic(json: any): JsonLogicNode {
   border-bottom: 2px solid #e5e7eb;
 }
 
+.header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .editor-header h2 {
   margin: 0;
   color: #1f2937;
 }
 
+.keyboard-shortcuts {
+  display: flex;
+  align-items: center;
+}
+
+.shortcut-hint {
+  font-size: 12px;
+  color: #6b7280;
+  background: rgba(107, 114, 128, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.operation-indicator {
+  font-size: 12px;
+  color: #059669;
+  background: rgba(5, 150, 105, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  margin-left: 8px;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .header-controls {
   display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.undo-redo-group {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.editor-actions {
+  display: flex;
   gap: 12px;
+}
+
+.undo-btn, .redo-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.9);
+  color: #374151;
+  min-width: 70px;
+}
+
+.undo-btn:hover:not(:disabled), .redo-btn:hover:not(:disabled) {
+  background: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.undo-btn:disabled, .redo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.3);
+  color: #9ca3af;
 }
 
 .add-rule-btn, .export-btn, .import-btn, .clear-btn {
@@ -441,6 +803,23 @@ function convertFromJsonLogic(json: any): JsonLogicNode {
 
 .clear-btn:hover {
   background: #dc2626;
+}
+
+.debug-btn {
+  background: #6b7280;
+  color: white;
+}
+
+.debug-btn:hover {
+  background: #4b5563;
+}
+
+.debug-btn.active {
+  background: #059669;
+}
+
+.debug-btn.active:hover {
+  background: #047857;
 }
 
 .editor-canvas {
@@ -647,5 +1026,94 @@ function convertFromJsonLogic(json: any): JsonLogicNode {
 .import-confirm-btn {
   background: #3b82f6;
   color: white;
+}
+
+.debug-panel {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.debug-panel h3 {
+  margin: 0 0 16px 0;
+  color: #374151;
+  font-size: 16px;
+}
+
+.debug-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.debug-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.debug-stat label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 13px;
+}
+
+.debug-stat span {
+  font-family: monospace;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.status-yes {
+  color: #059669 !important;
+  font-weight: 600;
+}
+
+.status-no {
+  color: #dc2626 !important;
+  font-weight: 600;
+}
+
+.debug-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.debug-clear-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.debug-clear-btn:hover {
+  background: #dc2626;
+}
+
+.debug-test-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.debug-test-btn:hover {
+  background: #2563eb;
 }
 </style>
