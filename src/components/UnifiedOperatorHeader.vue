@@ -1,5 +1,10 @@
 <template>
-  <div class="unified-operator-header" @mouseenter="onPreviewEnter" @mouseleave="onPreviewLeave">
+  <div 
+    class="unified-operator-header" 
+    :class="{ 'header-hidden': hideOnHover && !isParentHovered && !forceShow }"
+    @mouseenter="onHeaderEnter" 
+    @mouseleave="onHeaderLeave"
+  >
     <!-- Display mode buttons -->
     <DisplayModeButtons v-model="displayMode" />
     
@@ -48,6 +53,9 @@ interface Props {
   }>
   displayMode: 'inplace' | 'collapsed' | 'full'
   showPreview?: boolean
+  hideOnHover?: boolean
+  isParentHovered?: boolean
+  forceShow?: boolean
 }
 
 interface Emits {
@@ -59,12 +67,16 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showPreview: false
+  showPreview: false,
+  hideOnHover: false,
+  isParentHovered: false,
+  forceShow: false
 })
 
 const emit = defineEmits<Emits>()
 
 const showConversionMenu = ref(false)
+const isHovered = ref(false)
 
 // Use displayMode from props and emit changes
 const displayMode = computed({
@@ -91,6 +103,16 @@ function onPreviewEnter() {
 
 function onPreviewLeave() {
   emit('preview-leave')
+}
+
+function onHeaderEnter() {
+  isHovered.value = true
+  onPreviewEnter()
+}
+
+function onHeaderLeave() {
+  isHovered.value = false
+  onPreviewLeave()
 }
 
 function getCurrentType(): string {
@@ -129,6 +151,18 @@ function getCurrentType(): string {
   border-bottom: 1px solid #e5e7eb;
   border-radius: 6px 6px 0 0;
   gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.unified-operator-header.header-hidden {
+  opacity: 0;
+  height: 0;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin: 0;
+  border-bottom: none;
+  overflow: hidden;
 }
 
 .drag-handle {

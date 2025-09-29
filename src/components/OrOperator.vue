@@ -18,6 +18,9 @@
       operator-type="logic"
       :conversion-options="conversionOptions"
       :display-mode="displayMode"
+      :hide-on-hover="true"
+      :is-parent-hovered="isDirectlyHovered"
+      :force-show="showAllHeaders"
       @convert="convertToOperator"
       @delete="$emit('delete')"
       @preview-enter="onPreviewEnter"
@@ -182,6 +185,7 @@ import DisplayModeButtons from './DisplayModeButtons.vue'
 import ResizeHandle from './ResizeHandle.vue'
 import { getConversionOptions, convertOperatorNode } from '../utils/operatorConversion'
 import { useDisplayMode } from '../composables/useDisplayMode'
+import { useHoverManager, getShowAllHeaders } from '../composables/useHoverManager'
 
 
 interface Props {
@@ -203,7 +207,11 @@ const emit = defineEmits<Emits>()
 
 const localNode = ref<JsonLogicNode>({ ...props.node })
 const isDragging = ref(false)
-const isDirectlyHovered = ref(false)
+
+// Use hover manager for proper nested hover handling
+const elementId = `or-${localNode.value.id || Math.random().toString(36).substr(2, 9)}`
+const { isDirectlyHovered, onMouseEnter, onMouseLeave } = useHoverManager(elementId)
+const showAllHeaders = getShowAllHeaders()
 
 const showPreview = ref(false)
 const operatorRef = ref<HTMLElement>()
@@ -331,17 +339,7 @@ function getPreviewText(argument: JsonLogicNode): string {
 
 
 
-// Hover management
-function onMouseEnter(event: MouseEvent) {
-  // Only set hover if this is the direct target, not a child
-  if (event.target === event.currentTarget) {
-    isDirectlyHovered.value = true
-  }
-}
-
-function onMouseLeave() {
-  isDirectlyHovered.value = false
-}
+// Hover management is now handled by useHoverManager composable
 
 // Display mode functions are provided by useDisplayMode composable
 </script>

@@ -18,6 +18,9 @@
       operator-type="data"
       :conversion-options="typeOptions"
       :display-mode="displayMode"
+      :hide-on-hover="true"
+      :is-parent-hovered="isDirectlyHovered"
+      :force-show="showAllHeaders"
       @convert="convertToType"
       @delete="$emit('delete')"
       @preview-enter="onPreviewEnter"
@@ -194,6 +197,7 @@ import UnifiedOperatorHeader from './UnifiedOperatorHeader.vue'
 import DisplayModeButtons from './DisplayModeButtons.vue'
 import ResizeHandle from './ResizeHandle.vue'
 import { useDisplayMode } from '../composables/useDisplayMode'
+import { useHoverManager, getShowAllHeaders } from '../composables/useHoverManager'
 
 interface Props {
   node: JsonLogicNode
@@ -214,7 +218,11 @@ const emit = defineEmits<Emits>()
 
 const localNode = ref<JsonLogicNode>({ ...props.node })
 const isDragging = ref(false)
-const isDirectlyHovered = ref(false)
+
+// Use hover manager for proper nested hover handling
+const elementId = `literal-${localNode.value.id || generateId()}`
+const { isDirectlyHovered, onMouseEnter, onMouseLeave } = useHoverManager(elementId)
+const showAllHeaders = getShowAllHeaders()
 
 const operatorRef = ref<HTMLElement>()
 
@@ -437,17 +445,7 @@ function onArrayItemDelete(index: number) {
   emit('update', localNode.value)
 }
 
-// Hover management
-function onMouseEnter(event: MouseEvent) {
-  // Only set hover if this is the direct target, not a child
-  if (event.target === event.currentTarget) {
-    isDirectlyHovered.value = true
-  }
-}
-
-function onMouseLeave() {
-  isDirectlyHovered.value = false
-}
+// Hover management is now handled by useHoverManager composable
 
 // Drag and drop
 function onDragStart(event: DragEvent) {

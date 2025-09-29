@@ -29,6 +29,9 @@
         </div>
         <div class="editor-actions">
           <button @click="addNewRule" class="add-rule-btn">+ Add Rule</button>
+          <button @click="toggleHeaders" class="toggle-headers-btn" :class="{ active: showAllHeaders }">
+            {{ showAllHeaders ? '👁️ Hide Headers' : '👁️ Show All Headers' }}
+          </button>
           <button @click="exportJson" class="export-btn">Export JSON</button>
           <button @click="importJson" class="import-btn">Import JSON</button>
           <button @click="clearAll" class="clear-btn">Clear All</button>
@@ -184,6 +187,7 @@ import OrOperator from './OrOperator.vue'
 import AndOperator from './AndOperator.vue'
 import type { JsonLogicNode } from '../types/JsonLogic'
 import { undoRedoManager } from '../utils/undoRedoManager'
+import { toggleAllHeaders, getShowAllHeaders } from '../composables/useHoverManager'
 
 const rules = ref<JsonLogicNode[]>([])
 const isDragOver = ref(false)
@@ -199,6 +203,7 @@ const undoDescription = ref('')
 const redoDescription = ref('')
 const isUndoRedoOperation = ref(false)
 const showDebugInfo = ref(false)
+const showAllHeaders = getShowAllHeaders()
 let saveStateTimeout: number | null = null
 
 // Computed properties
@@ -242,6 +247,10 @@ function updateUndoRedoState() {
 
 function toggleDebugInfo() {
   showDebugInfo.value = !showDebugInfo.value
+}
+
+function toggleHeaders() {
+  toggleAllHeaders()
 }
 
 function runUndoRedoTest() {
@@ -799,7 +808,7 @@ onUnmounted(() => {
   color: #9ca3af;
 }
 
-.add-rule-btn, .export-btn, .import-btn, .clear-btn {
+.add-rule-btn, .export-btn, .import-btn, .clear-btn, .toggle-headers-btn {
   padding: 8px 16px;
   border: none;
   border-radius: 6px;
@@ -842,6 +851,19 @@ onUnmounted(() => {
 
 .clear-btn:hover {
   background: #dc2626;
+}
+
+.toggle-headers-btn {
+  background: #f59e0b;
+  color: white;
+}
+
+.toggle-headers-btn:hover {
+  background: #d97706;
+}
+
+.toggle-headers-btn.active {
+  background: #059669;
 }
 
 .debug-btn {
