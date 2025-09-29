@@ -101,7 +101,16 @@ const filteredCategories = computed(() => {
   })
   
   return Array.from(categories.values()).sort((a, b) => {
-    const order = ['person', 'ctgroup', 'groupmember', 'groupmemberfield', 'groupmemberfieldvalue', 'relationship', 'transaction', 'status', 'role', 'grouptype', 'groupstatus', 'other']
+    const order = [
+      'person', 'ctgroup', 'groupmember', 'groupmemberfield', 'groupmemberfieldvalue',
+      'relationship', 'relationship__personA', 'relationship__personB', 'relationshiptype',
+      'transaction', 'transaction__donator', 'transaction__donatorSpouse',
+      'status', 'role', 'grouptype', 'groupstatus',
+      'account', 'accountingperiod', 'costcenter',
+      'avatar', 'familyavatar', 'contactlabel', 'personemail',
+      'device', 'fieldtype', 'language', 'translation', 'translationkey',
+      'other'
+    ]
     const aIndex = order.indexOf(a.name)
     const bIndex = order.indexOf(b.name)
     return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex)
@@ -118,17 +127,34 @@ function getFieldCategory(field: string): string {
 
 function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
-    'person': 'Person',
-    'ctgroup': 'Group',
-    'groupmember': 'Group Member',
-    'groupmemberfield': 'Member Field',
-    'groupmemberfieldvalue': 'Field Value',
-    'relationship': 'Relationship',
-    'transaction': 'Transaction',
-    'status': 'Status',
-    'role': 'Role',
-    'grouptype': 'Group Type',
+    'account': 'Accounts',
+    'accountingperiod': 'Accounting Periods',
+    'avatar': 'Avatars',
+    'contactlabel': 'Contact Labels',
+    'costcenter': 'Cost Centers',
+    'ctgroup': 'Groups',
+    'device': 'Devices',
+    'familyavatar': 'Family Avatars',
+    'fieldtype': 'Field Types',
+    'groupmember': 'Group Members',
+    'groupmemberfield': 'Member Fields',
+    'groupmemberfieldvalue': 'Field Values',
     'groupstatus': 'Group Status',
+    'grouptype': 'Group Types',
+    'language': 'Languages',
+    'person': 'Persons',
+    'personemail': 'Person Emails',
+    'relationship': 'Relationships',
+    'relationship__personA': 'Related Person A',
+    'relationship__personB': 'Related Person B',
+    'relationshiptype': 'Relationship Types',
+    'role': 'Roles',
+    'status': 'Status',
+    'transaction': 'Transactions',
+    'transaction__donator': 'Transaction Donator',
+    'transaction__donatorSpouse': 'Donator Spouse',
+    'translation': 'Translations',
+    'translationkey': 'Translation Keys',
     'other': 'Other'
   }
   return labels[category] || category
@@ -140,23 +166,61 @@ function getFieldDescription(field: string): string {
     const entity = parts[0]
     const property = parts.slice(1).join('.')
     
-    const descriptions: Record<string, string> = {
-      'person.firstName': 'First name of the person',
-      'person.lastName': 'Last name of the person',
-      'person.email': 'Email address',
-      'person.age': 'Age in years',
-      'person.birthDate': 'Date of birth',
-      'ctgroup.name': 'Group name',
-      'ctgroup.description': 'Group description',
-      'ctgroup.memberCount': 'Number of members',
-      'groupmember.joinDate': 'Date when member joined',
-      'groupmember.role': 'Member role in group',
-      'transaction.amount': 'Transaction amount',
-      'transaction.date': 'Transaction date',
-      'status.active': 'Whether status is active'
+    // Common field descriptions
+    const commonDescriptions: Record<string, string> = {
+      'id': 'Unique identifier',
+      'name': 'Name or title',
+      'createdDate': 'Date when record was created',
+      'modifiedDate': 'Date when record was last modified',
+      'createdPid': 'ID of person who created this record',
+      'modifiedPid': 'ID of person who last modified this record',
+      'isActive': 'Whether the record is active',
+      'isArchived': 'Whether the record is archived',
+      'email': 'Email address',
+      'firstName': 'First name',
+      'lastName': 'Last name',
+      'birthday': 'Date of birth',
+      'mobile': 'Mobile phone number',
+      'street': 'Street address',
+      'city': 'City name',
+      'zip': 'Postal code',
+      'country': 'Country name',
+      'startDate': 'Start date',
+      'endDate': 'End date',
+      'amount': 'Monetary amount',
+      'note': 'Additional notes or comments',
+      'sortKey': 'Sort order key'
     }
     
-    return descriptions[field] || `${property} from ${entity}`
+    // Specific field descriptions
+    const specificDescriptions: Record<string, string> = {
+      'person.sexId': 'Gender identifier',
+      'person.statusId': 'Person status identifier',
+      'person.campusId': 'Campus identifier',
+      'person.familyStatusId': 'Family status identifier',
+      'person.dateOfBaptism': 'Date of baptism',
+      'person.dateOfBelonging': 'Date of belonging to church',
+      'person.dateOfEntry': 'Date of entry',
+      'person.dateOfResign': 'Date of resignation',
+      'person.lastLogin': 'Last login date',
+      'ctgroup.groupTypeId': 'Group type identifier',
+      'ctgroup.groupStatusId': 'Group status identifier',
+      'ctgroup.autoAccept': 'Automatically accept new members',
+      'ctgroup.maxMembers': 'Maximum number of members',
+      'ctgroup.allowWaitinglist': 'Allow waiting list',
+      'ctgroup.visibility': 'Group visibility setting',
+      'ctgroup.meetingTime': 'Regular meeting time',
+      'ctgroup.weekday': 'Meeting weekday',
+      'groupmember.groupMemberStatus': 'Member status in group',
+      'groupmember.memberStartDate': 'Date when membership started',
+      'groupmember.memberEndDate': 'Date when membership ended',
+      'groupmember.waitingListPosition': 'Position on waiting list',
+      'transaction.documentDate': 'Document date',
+      'transaction.documentNumber': 'Document number',
+      'transaction.donatorId': 'Donator person identifier'
+    }
+    
+    return specificDescriptions[field] || commonDescriptions[property] || `${property} from ${entity}`
   }
   return 'Field value'
 }
