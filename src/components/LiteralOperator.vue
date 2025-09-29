@@ -5,7 +5,7 @@
     :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered, 'is-resizing': isResizing, 'is-selected': isSelected }"
     :data-display-mode="displayMode"
     :style="resizeStyle"
-    draggable="true"
+    draggable="false"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @mouseenter="onMouseEnter"
@@ -447,13 +447,11 @@ function onArrayItemDelete(index: number) {
 
 // Hover management is now handled by useHoverManager composable
 
-// Drag and drop
+// Drag and drop (disabled for now)
 function onDragStart(event: DragEvent) {
-  isDragging.value = true
-  if (event.dataTransfer) {
-    event.dataTransfer.setData('application/json', JSON.stringify(localNode.value))
-    event.dataTransfer.effectAllowed = 'move'
-  }
+  // Disabled - prevent default drag behavior
+  event.preventDefault()
+  return false
 }
 
 function onDragEnd() {

@@ -48,7 +48,7 @@
     :data-ui-hint="currentOperator?.uiHints?.join(' ')"
     :data-display-mode="displayMode"
     :style="resizeStyle"
-    draggable="true"
+    draggable="false"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @mouseenter="onMouseEnter"

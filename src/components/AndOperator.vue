@@ -5,7 +5,7 @@
     :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered, 'is-resizing': isResizing, 'is-selected': isSelected }"
     :data-display-mode="displayMode"
     :style="resizeStyle"
-    draggable="true"
+    draggable="false"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @mouseenter="onMouseEnter"
