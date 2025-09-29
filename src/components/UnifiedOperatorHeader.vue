@@ -51,7 +51,7 @@
 
     <!-- Standard Header (when not using hover mode) -->
     <div 
-      v-if="!hideOnHover || forceShow"
+      v-if="!hideOnHover && !forceShow"
       class="unified-operator-header standard"
       @mouseenter="onHeaderEnter" 
       @mouseleave="onHeaderLeave"
