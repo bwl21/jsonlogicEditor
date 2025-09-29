@@ -208,18 +208,22 @@ function getCurrentType(): string {
   transition: all 0.3s ease;
 }
 
-/* Standard header (full size) */
+/* Standard header (reduced size) */
 .unified-operator-header.standard {
-  padding: 8px 12px;
-  gap: 8px;
+  padding: 1px 3px;
+  min-height: 10px;
+  background: rgba(243, 244, 246, 0.7);
+  border-bottom: 1px solid rgba(229, 231, 235, 0.5);
+  font-size: 8px;
 }
 
 /* Compact header (minimal size) */
 .unified-operator-header.compact {
-  padding: 4px 8px;
-  min-height: 28px;
+  padding: 1px 3px;
+  min-height: 10px;
   background: rgba(243, 244, 246, 0.7);
   border-bottom: 1px solid rgba(229, 231, 235, 0.5);
+  font-size: 8px;
 }
 
 .unified-operator-header.compact.header-hidden {
@@ -239,7 +243,7 @@ function getCurrentType(): string {
   left: 0;
   right: 0;
   z-index: 100;
-  padding: 8px 12px;
+  padding: 4px 4px;
   gap: 8px;
   background: #ffffff;
   border: 1px solid #d1d5db;
@@ -263,16 +267,18 @@ function getCurrentType(): string {
 .compact-content {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   width: 100%;
+  height: 8px;
 }
 
 .operator-label-compact {
-  font-size: 12px;
+  font-size: 7px;
   font-weight: 600;
   color: #6b7280;
   flex: 1;
   text-align: center;
+  line-height: 1;
 }
 
 .drag-handle {
@@ -283,9 +289,10 @@ function getCurrentType(): string {
 }
 
 .drag-handle.compact {
-  font-size: 10px;
-  margin-right: 4px;
-  opacity: 0.6;
+  font-size: 5px;
+  margin-right: 1px;
+  opacity: 0.5;
+  line-height: 1;
 }
 
 .drag-handle:active {
@@ -303,7 +310,7 @@ function getCurrentType(): string {
   cursor: pointer;
   font-size: 14px;
   font-weight: bold;
-  padding: 6px 12px;
+  padding: 2px 2px;
   border-radius: 6px;
   border: 1px solid;
   transition: all 0.2s ease;
@@ -374,13 +381,13 @@ function getCurrentType(): string {
 }
 
 .delete-btn {
-  background: #fee2e2;
-  border: 1px solid #fca5a5;
+  //background: #fee2e2;
+  border: 0px solid #fca5a5;
   color: #dc2626;
   cursor: pointer;
   font-size: 16px;
   font-weight: bold;
-  padding: 4px 8px;
+  padding: 1px 4px;
   border-radius: 4px;
   transition: all 0.2s ease;
 }
