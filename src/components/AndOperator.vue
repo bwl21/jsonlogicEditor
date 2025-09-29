@@ -12,37 +12,19 @@
     @mouseleave="onMouseLeave"
     @click.stop="$emit('select')"
   >
-    <!-- Header -->
-    <div class="operator-header" @mouseenter="onPreviewEnter" @mouseleave="onPreviewLeave">
-      <div class="drag-handle">⋮⋮</div>
-      <!-- Display mode buttons -->
-      <DisplayModeButtons v-model="displayMode" />
-      <div class="operator-wrapper">
-        <button 
-          @click="toggleConversionMenu" 
-          class="operator-button"
-          :title="showConversionMenu ? 'Close conversion menu' : 'Convert AND to different operator'"
-        >
-          AND
-        </button>
-        
-        <ConversionMenu
-          :is-open="showConversionMenu"
-          :options="conversionOptions"
-          @close="showConversionMenu = false"
-          @convert="convertToOperator"
-        />
-      </div>
-      <span v-if="displayMode === 'collapsed'" class="condition-count">({{ localNode.arguments?.length || 0 }} conditions)</span>
-      <button 
-        v-if="displayMode === 'inplace'"
-        @click="$emit('delete')" 
-        class="delete-btn" 
-        title="Delete this AND operator"
-      >
-        ×
-      </button>
-    </div>
+    <!-- Unified Header -->
+    <UnifiedOperatorHeader
+      operator-label="AND"
+      operator-type="logic"
+      :conversion-options="conversionOptions"
+      :display-mode="displayMode"
+      @convert="convertToOperator"
+      @delete="$emit('delete')"
+      @preview-enter="onPreviewEnter"
+      @preview-leave="onPreviewLeave"
+      @update:display-mode="displayMode = $event"
+    />
+    <span v-if="displayMode === 'collapsed'" class="condition-count">({{ localNode.arguments?.length || 0 }} conditions)</span>
 
     <!-- Preview when collapsed and hovered -->
     <div v-if="displayMode === 'collapsed' && showPreview" class="preview-popup">
@@ -85,51 +67,20 @@
               @select="$emit('select')"
             />
             
-            <!-- Variable input -->
-            <div v-else-if="argument.type === 'variable'" class="simple-input">
-              <span class="input-type-label">var:</span>
-              <FieldNameInput
-                v-model="argument.value"
-                @update:modelValue="onArgumentUpdate(index, argument)"
-                placeholder="Field name"
-                class="field-input"
-              />
-              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
-            </div>
+            <!-- Use LiteralOperator for variables, literals, and arrays -->
+            <LiteralOperator
+              v-else-if="argument.type === 'variable' || argument.type === 'literal' || argument.type === 'array'"
+              :node="argument"
+              :is-selected="isSelected"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentUpdate(index, $event)"
+              @select="$emit('select')"
+            />
             
-            <!-- Array input -->
-            <div v-else-if="argument.type === 'array'" class="simple-input">
-              <span class="input-type-label">array:</span>
-              <div class="array-items">
-                <div v-for="(item, itemIndex) in argument.items" :key="itemIndex" class="array-item">
-                  <input 
-                    v-model="item.value" 
-                    @input="onArrayItemUpdate(index, itemIndex, item)"
-                    placeholder="Array item"
-                    class="array-item-input"
-                  />
-                  <button @click="removeArrayItem(index, itemIndex)" class="delete-item-btn">×</button>
-                </div>
-                <button @click="addArrayItem(index)" class="add-item-btn">+ Item</button>
-              </div>
-              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
-            </div>
-            
-            <!-- Literal input -->
-            <div v-else class="simple-input">
-              <select v-model="argument.type" @change="onArgumentTypeChange(index)" class="type-select">
-                <option value="literal">Literal</option>
-                <option value="variable">Variable</option>
-                <option value="array">Array</option>
-                <option value="expression">Expression</option>
-              </select>
-              <input 
-                v-if="argument.type === 'literal'"
-                v-model="argument.value" 
-                @input="onArgumentUpdate(index, argument)"
-                placeholder="Enter value"
-                class="value-input"
-              />
+            <!-- Fallback for unknown argument types -->
+            <div v-else class="unknown-argument">
+              <span>Unknown argument type: {{ argument.type }}</span>
               <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
             </div>
           </div>
@@ -190,50 +141,20 @@
               @select="$emit('select')"
             />
             
-            <!-- Variable input -->
-            <div v-else-if="argument.type === 'variable'" class="simple-input">
-              <span class="input-type-label">var:</span>
-              <FieldNameInput
-                v-model="argument.value"
-                @update:modelValue="onArgumentUpdate(index, argument)"
-                placeholder="Field name"
-                class="field-input"
-              />
-              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
-            </div>
+            <!-- Use LiteralOperator for variables, literals, and arrays -->
+            <LiteralOperator
+              v-else-if="argument.type === 'variable' || argument.type === 'literal' || argument.type === 'array'"
+              :node="argument"
+              :is-selected="isSelected"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentUpdate(index, $event)"
+              @select="$emit('select')"
+            />
             
-            <!-- Array input -->
-            <div v-else-if="argument.type === 'array'" class="simple-input">
-              <span class="input-type-label">array:</span>
-              <div class="array-items">
-                <div v-for="(item, itemIndex) in argument.items" :key="itemIndex" class="array-item">
-                  <input 
-                    v-model="item.value" 
-                    @input="onArrayItemUpdate(index, itemIndex, item)"
-                    placeholder="Array item"
-                    class="array-item-input"
-                  />
-                  <button @click="removeArrayItem(index, itemIndex)" class="delete-item-btn">×</button>
-                </div>
-                <button @click="addArrayItem(index)" class="add-item-btn">+ Item</button>
-              </div>
-              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
-            </div>
-            
-            <!-- Literal input -->
-            <div v-else class="simple-input">
-              <select v-model="argument.type" @change="onArgumentTypeChange(index)" class="type-select">
-                <option value="literal">Literal</option>
-                <option value="variable">Variable</option>
-                <option value="array">Array</option>
-                <option value="expression">Expression</option>
-              </select>
-              <input 
-                v-model="argument.value" 
-                @input="onArgumentUpdate(index, argument)"
-                placeholder="Value"
-                class="value-input"
-              />
+            <!-- Fallback for unknown argument types -->
+            <div v-else class="unknown-argument">
+              <span>Unknown argument type: {{ argument.type }}</span>
               <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
             </div>
           </div>
@@ -254,9 +175,10 @@
 import { ref, computed, watch } from 'vue'
 import type { JsonLogicNode } from '../types/JsonLogic'
 import JsonLogicAtom from './JsonLogicAtom.vue'
-import FieldNameInput from './FieldNameInput.vue'
+
+import UnifiedOperatorHeader from './UnifiedOperatorHeader.vue'
+import LiteralOperator from './LiteralOperator.vue'
 import DisplayModeButtons from './DisplayModeButtons.vue'
-import ConversionMenu from './ConversionMenu.vue'
 import ResizeHandle from './ResizeHandle.vue'
 import { getConversionOptions, convertOperatorNode } from '../utils/operatorConversion'
 import { useDisplayMode } from '../composables/useDisplayMode'
@@ -282,7 +204,7 @@ const emit = defineEmits<Emits>()
 const localNode = ref<JsonLogicNode>({ ...props.node })
 const isDragging = ref(false)
 const isDirectlyHovered = ref(false)
-const showConversionMenu = ref(false)
+
 const showPreview = ref(false)
 const operatorRef = ref<HTMLElement>()
 
@@ -359,72 +281,7 @@ function onArgumentDelete(index: number) {
   emit('update', localNode.value)
 }
 
-function onArgumentTypeChange(index: number) {
-  if (!localNode.value.arguments) return
-  
-  const argument = localNode.value.arguments[index]
-  
-  switch (argument.type) {
-    case 'variable':
-      argument.value = 'person.firstName'
-      break
-    case 'array':
-      argument.items = [{ id: generateId(), type: 'literal', value: '' }]
-      delete argument.value
-      break
-    case 'expression':
-      argument.operator = ''
-      argument.arguments = []
-      delete argument.value
-      break
-    case 'literal':
-    default:
-      argument.value = ''
-      delete argument.items
-      delete argument.operator
-      delete argument.arguments
-      break
-  }
-  
-  emit('update', localNode.value)
-}
 
-function addArrayItem(argumentIndex: number) {
-  if (!localNode.value.arguments) return
-  
-  const argument = localNode.value.arguments[argumentIndex]
-  if (argument.type !== 'array') return
-  
-  if (!argument.items) argument.items = []
-  
-  argument.items.push({
-    id: generateId(),
-    type: 'literal',
-    value: ''
-  })
-  
-  emit('update', localNode.value)
-}
-
-function removeArrayItem(argumentIndex: number, itemIndex: number) {
-  if (!localNode.value.arguments) return
-  
-  const argument = localNode.value.arguments[argumentIndex]
-  if (argument.type !== 'array' || !argument.items) return
-  
-  argument.items.splice(itemIndex, 1)
-  emit('update', localNode.value)
-}
-
-function onArrayItemUpdate(argumentIndex: number, itemIndex: number, updatedItem: JsonLogicNode) {
-  if (!localNode.value.arguments) return
-  
-  const argument = localNode.value.arguments[argumentIndex]
-  if (argument.type !== 'array' || !argument.items) return
-  
-  argument.items[itemIndex] = updatedItem
-  emit('update', localNode.value)
-}
 
 // Drag and drop
 function onDragStart(event: DragEvent) {
@@ -440,14 +297,9 @@ function onDragEnd() {
 }
 
 // Conversion functions
-function toggleConversionMenu() {
-  showConversionMenu.value = !showConversionMenu.value
-}
-
 function convertToOperator(newOperator: string) {
   const convertedNode = convertOperatorNode(localNode.value, newOperator)
   localNode.value = convertedNode
-  showConversionMenu.value = false
   emit('convert', newOperator)
 }
 
@@ -501,8 +353,8 @@ function onMouseLeave() {
   border-radius: 8px;
   background: white;
   margin: 8px 2px 8px 0;
-  min-width: 300px;
-  max-width: calc(100% - 4px);
+  min-width: 250px;
+  max-width: calc(100vw - 40px);
   width: auto;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.2s ease;
@@ -757,23 +609,7 @@ function onMouseLeave() {
   height: auto;
 }
 
-.and-arguments::-webkit-scrollbar {
-  height: 6px;
-}
 
-.and-arguments::-webkit-scrollbar-track {
-  background: #dbeafe;
-  border-radius: 3px;
-}
-
-.and-arguments::-webkit-scrollbar-thumb {
-  background: #3b82f6;
-  border-radius: 3px;
-}
-
-.and-arguments::-webkit-scrollbar-thumb:hover {
-  background: #2563eb;
-}
 
 .and-argument {
   display: flex;
