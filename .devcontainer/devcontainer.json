@@ -6,6 +6,11 @@
 	// Much faster startup than universal image (~10GB)
 	"image": "mcr.microsoft.com/devcontainers/javascript-node:22",
 	
+	// Additional development tools
+	"features": {
+		"ghcr.io/devcontainers/features/github-cli:1": {}
+	},
+	
 	// Configure tool-specific properties.
 	"customizations": {
 		// Configure properties specific to VS Code.
