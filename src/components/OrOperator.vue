@@ -72,7 +72,7 @@
             
             <!-- Use LiteralOperator for variables, literals, and arrays -->
             <LiteralOperator
-              v-else-if="argument.type === 'variable' || argument.type === 'literal' || argument.type === 'array'"
+              v-else-if="argument.type === 'variable' || argument.type === 'literal' || argument.type === 'array' || argument.type === 'string' || argument.type === 'number' || argument.type === 'boolean' || argument.type === 'date'"
               :node="argument"
               :is-selected="isSelected"
               @update="onArgumentUpdate(index, $event)"
@@ -143,7 +143,7 @@
             
             <!-- Use LiteralOperator for variables, literals, and arrays -->
             <LiteralOperator
-              v-else-if="argument.type === 'variable' || argument.type === 'literal' || argument.type === 'array'"
+              v-else-if="argument.type === 'variable' || argument.type === 'literal' || argument.type === 'array' || argument.type === 'string' || argument.type === 'number' || argument.type === 'boolean' || argument.type === 'date'"
               :node="argument"
               :is-selected="isSelected"
               @update="onArgumentUpdate(index, $event)"

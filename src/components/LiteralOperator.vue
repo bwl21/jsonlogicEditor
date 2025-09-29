@@ -34,18 +34,63 @@
             v-model="localNode.value"
             @update:modelValue="onValueUpdate"
             placeholder="Field name"
-            class="field-input"
           />
         </div>
         
-        <!-- Literal input -->
+        <!-- String literal -->
+        <div v-else-if="localNode.type === 'string'" class="literal-input">
+          <input 
+            v-model="localNode.value" 
+            @input="onValueUpdate"
+            placeholder="Enter text"
+            class="value-input"
+            type="text"
+          />
+        </div>
+        
+        <!-- Number literal -->
+        <div v-else-if="localNode.type === 'number'" class="literal-input">
+          <input 
+            v-model.number="localNode.value" 
+            @input="onValueUpdate"
+            placeholder="Enter number"
+            class="value-input"
+            type="number"
+            step="any"
+          />
+        </div>
+        
+        <!-- Boolean literal -->
+        <div v-else-if="localNode.type === 'boolean'" class="literal-input">
+          <select 
+            v-model="localNode.value" 
+            @change="onValueUpdate"
+            class="value-input"
+          >
+            <option :value="true">True</option>
+            <option :value="false">False</option>
+          </select>
+        </div>
+        
+        <!-- Date literal -->
+        <div v-else-if="localNode.type === 'date'" class="literal-input">
+          <input 
+            v-model="localNode.value" 
+            @input="onValueUpdate"
+            placeholder="Select date"
+            class="value-input"
+            type="date"
+          />
+        </div>
+        
+        <!-- Legacy literal (for backward compatibility) -->
         <div v-else-if="localNode.type === 'literal'" class="literal-input">
           <input 
             v-model="localNode.value" 
             @input="onValueUpdate"
-            :placeholder="getPlaceholder()"
+            placeholder="Enter value"
             class="value-input"
-            :type="getInputType()"
+            type="text"
           />
         </div>
         
@@ -211,7 +256,10 @@ watch(() => props.node, (newNode) => {
 // Type conversion options
 const typeOptions = computed(() => {
   return [
-    { operator: 'literal', label: 'Literal', description: 'Static value', category: 'data' },
+    { operator: 'string', label: 'String', description: 'Text value', category: 'data' },
+    { operator: 'number', label: 'Number', description: 'Numeric value', category: 'data' },
+    { operator: 'boolean', label: 'Boolean', description: 'True/False value', category: 'data' },
+    { operator: 'date', label: 'Date', description: 'Date value', category: 'data' },
     { operator: 'variable', label: 'Variable', description: 'Database field', category: 'data' },
     { operator: 'array', label: 'Array', description: 'List of values', category: 'data' },
     { operator: '==', label: 'Equals', description: 'Compare two values for equality', category: 'comparison' },
@@ -234,6 +282,10 @@ function getTypeLabel(): string {
   switch (localNode.value.type) {
     case 'variable': return 'Variable'
     case 'array': return 'Array'
+    case 'string': return 'String'
+    case 'number': return 'Number'
+    case 'boolean': return 'Boolean'
+    case 'date': return 'Date'
     case 'literal': 
     default: return 'Literal'
   }
@@ -276,8 +328,36 @@ function convertToType(newType: string) {
       break
     case 'array':
       localNode.value.type = 'array'
-      localNode.value.items = [{ id: generateId(), type: 'literal', value: '' }]
+      localNode.value.items = [{ id: generateId(), type: 'string', value: '' }]
       delete localNode.value.value
+      delete localNode.value.operator
+      delete localNode.value.arguments
+      break
+    case 'string':
+      localNode.value.type = 'string'
+      localNode.value.value = ''
+      delete localNode.value.items
+      delete localNode.value.operator
+      delete localNode.value.arguments
+      break
+    case 'number':
+      localNode.value.type = 'number'
+      localNode.value.value = 0
+      delete localNode.value.items
+      delete localNode.value.operator
+      delete localNode.value.arguments
+      break
+    case 'boolean':
+      localNode.value.type = 'boolean'
+      localNode.value.value = false
+      delete localNode.value.items
+      delete localNode.value.operator
+      delete localNode.value.arguments
+      break
+    case 'date':
+      localNode.value.type = 'date'
+      localNode.value.value = new Date().toISOString().split('T')[0]
+      delete localNode.value.items
       delete localNode.value.operator
       delete localNode.value.arguments
       break
@@ -304,12 +384,12 @@ function convertToType(newType: string) {
       localNode.value.arguments = [
         {
           id: generateId(),
-          type: 'literal',
+          type: 'string',
           value: currentValue
         },
         {
           id: generateId(),
-          type: 'literal',
+          type: 'string',
           value: ''
         }
       ]
@@ -336,7 +416,7 @@ function addArrayItem() {
   
   localNode.value.items.push({
     id: generateId(),
-    type: 'literal',
+    type: 'string',
     value: ''
   })
   
@@ -550,9 +630,6 @@ function onDragEnd() {
   align-items: center;
   gap: 8px;
   padding: 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: #f9fafb;
 }
 
 .input-label {
@@ -562,7 +639,7 @@ function onDragEnd() {
   min-width: 40px;
 }
 
-.field-input, .value-input {
+.value-input {
   flex: 1;
   border: 1px solid #d1d5db;
   border-radius: 4px;
@@ -572,10 +649,7 @@ function onDragEnd() {
 
 /* Array inputs */
 .array-input {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
   padding: 12px;
-  background: #f9fafb;
 }
 
 .array-items {
@@ -590,9 +664,6 @@ function onDragEnd() {
   align-items: center;
   gap: 8px;
   padding: 6px;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  background: white;
 }
 
 .array-item-input {

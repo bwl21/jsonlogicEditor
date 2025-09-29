@@ -61,7 +61,7 @@
             
             <!-- Use LiteralOperator for variables, literals, and arrays -->
             <LiteralOperator
-              v-else-if="localNode.arguments?.[0] && (localNode.arguments[0].type === 'variable' || localNode.arguments[0].type === 'literal' || localNode.arguments[0].type === 'array')"
+              v-else-if="localNode.arguments?.[0] && (localNode.arguments[0].type === 'variable' || localNode.arguments[0].type === 'literal' || localNode.arguments[0].type === 'array' || localNode.arguments[0].type === 'string' || localNode.arguments[0].type === 'number' || localNode.arguments[0].type === 'boolean' || localNode.arguments[0].type === 'date')"
               :node="localNode.arguments[0]"
               :is-selected="isSelected"
               @update="onArgumentUpdate(0, $event)"
@@ -92,7 +92,7 @@
             
             <!-- Use LiteralOperator for variables, literals, and arrays -->
             <LiteralOperator
-              v-else-if="localNode.arguments?.[1] && (localNode.arguments[1].type === 'variable' || localNode.arguments[1].type === 'literal' || localNode.arguments[1].type === 'array')"
+              v-else-if="localNode.arguments?.[1] && (localNode.arguments[1].type === 'variable' || localNode.arguments[1].type === 'literal' || localNode.arguments[1].type === 'array' || localNode.arguments[1].type === 'string' || localNode.arguments[1].type === 'number' || localNode.arguments[1].type === 'boolean' || localNode.arguments[1].type === 'date')"
               :node="localNode.arguments[1]"
               :is-selected="isSelected"
               @update="onArgumentUpdate(1, $event)"
