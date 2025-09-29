@@ -1,48 +1,28 @@
-// The Dev Container format allows you to configure your environment. At the heart of it
-// is a Docker image or Dockerfile which controls the tools available in your environment.
-//
-// See https://aka.ms/devcontainer.json for more information.
+// Optimized Dev Container for Vue.js/TypeScript development
+// Uses Node.js-specific image for faster startup and smaller size
 {
-	"name": "Ona",
-	// This universal image (~10GB) includes many development tools and languages,
-	// providing a convenient all-in-one development environment.
-	//
-	// This image is already available on remote runners for fast startup. On desktop
-	// and linux runners, it will need to be downloaded, which may take longer.
-	//
-	// For faster startup on desktop/linux, consider a smaller, language-specific image:
-	// • For Python: mcr.microsoft.com/devcontainers/python:3.13
-	// • For Node.js: mcr.microsoft.com/devcontainers/javascript-node:24
-	// • For Go: mcr.microsoft.com/devcontainers/go:1.24
-	// • For Java: mcr.microsoft.com/devcontainers/java:21
-	//
-	// Browse more options at: https://hub.docker.com/r/microsoft/devcontainers
-	// or build your own using the Dockerfile option below.
-	"image": "mcr.microsoft.com/devcontainers/universal:3.0.3",
+	"name": "Vue.js JsonLogic Editor",
+	// Node.js 22 image (~2-3GB) optimized for JavaScript/TypeScript development
+	// Much faster startup than universal image (~10GB)
+	"image": "mcr.microsoft.com/devcontainers/javascript-node:22",
 	
 	// Configure tool-specific properties.
 	"customizations": {
 		// Configure properties specific to VS Code.
 		"vscode": {
-			// Add the IDs of extensions you want installed when the container is created.
+			// Extensions for Vue.js, TypeScript, and general development
 			"extensions": [
 				"Vue.volar",
-				"Vue.vscode-typescript-vue-plugin"
+				"Vue.vscode-typescript-vue-plugin",
+				"esbenp.prettier-vscode",
+				"bradlc.vscode-tailwindcss"
 			]
 		}
-	}
+	},
 	
-	// Use "build":
-	// instead of the image to use a Dockerfile to build an image.
-	// "build": {
-    //     "context": ".",
-    //     "dockerfile": "Dockerfile"
-    // }
-	// Features add additional features to your environment. See https://containers.dev/features
-	// Beware: features are not supported on all platforms and may have unintended side-effects.
-	// "features": {
-    //   "ghcr.io/devcontainers/features/docker-in-docker": {
-    //     "moby": false
-    //   }
-    // }
+	// Forward Vite development server port
+	"forwardPorts": [5173],
+	
+	// Automatically install dependencies after container creation
+	"postCreateCommand": "npm install"
 }
