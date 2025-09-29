@@ -1,39 +1,91 @@
 <template>
-  <div 
-    class="unified-operator-header" 
-    :class="{ 'header-hidden': hideOnHover && !isParentHovered && !forceShow }"
-    @mouseenter="onHeaderEnter" 
-    @mouseleave="onHeaderLeave"
-  >
-    <!-- Display mode buttons -->
-    <DisplayModeButtons v-model="displayMode" />
-    
-    <div class="drag-handle">⋮⋮</div>
-    
-    <div class="operator-wrapper">
-      <button 
-        @click="toggleConversionMenu" 
-        class="operator-button"
-        :class="operatorButtonClass"
-        :title="showConversionMenu ? 'Close conversion menu' : `Convert ${operatorLabel} to different operator`"
-      >
-        {{ operatorLabel }}
-      </button>
-      
-      <ConversionModal
-        :is-open="showConversionMenu"
-        :current-type="getCurrentType()"
-        :options="conversionOptions"
-        @convert="$emit('convert', $event)"
-        @close="showConversionMenu = false"
-      />
+  <div class="header-container">
+    <!-- Compact Header (always visible) -->
+    <div 
+      class="unified-operator-header compact"
+      :class="{ 'header-hidden': hideOnHover && !isParentHovered && !forceShow }"
+    >
+      <div class="compact-content">
+        <div class="drag-handle compact">⋮⋮</div>
+        <span class="operator-label-compact">{{ operatorLabel }}</span>
+      </div>
     </div>
-    
-    <div class="spacer"></div>
-    
-    <button @click="$emit('delete')" class="delete-btn">
-      ×
-    </button>
+
+    <!-- Full Header Overlay (on hover) -->
+    <div 
+      v-if="(isParentHovered || forceShow) && hideOnHover"
+      class="unified-operator-header overlay"
+      @mouseenter="onHeaderEnter" 
+      @mouseleave="onHeaderLeave"
+    >
+      <!-- Display mode buttons -->
+      <DisplayModeButtons v-model="displayMode" />
+      
+      <div class="drag-handle">⋮⋮</div>
+      
+      <div class="operator-wrapper">
+        <button 
+          @click="toggleConversionMenu" 
+          class="operator-button"
+          :class="operatorButtonClass"
+          :title="showConversionMenu ? 'Close conversion menu' : `Convert ${operatorLabel} to different operator`"
+        >
+          {{ operatorLabel }}
+        </button>
+        
+        <ConversionModal
+          :is-open="showConversionMenu"
+          :current-type="getCurrentType()"
+          :options="conversionOptions"
+          @convert="$emit('convert', $event)"
+          @close="showConversionMenu = false"
+        />
+      </div>
+      
+      <div class="spacer"></div>
+      
+      <button @click="$emit('delete')" class="delete-btn">
+        ×
+      </button>
+    </div>
+
+    <!-- Standard Header (when not using hover mode) -->
+    <div 
+      v-if="!hideOnHover || forceShow"
+      class="unified-operator-header standard"
+      @mouseenter="onHeaderEnter" 
+      @mouseleave="onHeaderLeave"
+    >
+      <!-- Display mode buttons -->
+      <DisplayModeButtons v-model="displayMode" />
+      
+      <div class="drag-handle">⋮⋮</div>
+      
+      <div class="operator-wrapper">
+        <button 
+          @click="toggleConversionMenu" 
+          class="operator-button"
+          :class="operatorButtonClass"
+          :title="showConversionMenu ? 'Close conversion menu' : `Convert ${operatorLabel} to different operator`"
+        >
+          {{ operatorLabel }}
+        </button>
+        
+        <ConversionModal
+          :is-open="showConversionMenu"
+          :current-type="getCurrentType()"
+          :options="conversionOptions"
+          @convert="$emit('convert', $event)"
+          @close="showConversionMenu = false"
+        />
+      </div>
+      
+      <div class="spacer"></div>
+      
+      <button @click="$emit('delete')" class="delete-btn">
+        ×
+      </button>
+    </div>
   </div>
 </template>
 
@@ -143,26 +195,84 @@ function getCurrentType(): string {
 </script>
 
 <style scoped>
+.header-container {
+  position: relative;
+}
+
 .unified-operator-header {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
   background: #f3f4f6;
   border-bottom: 1px solid #e5e7eb;
   border-radius: 6px 6px 0 0;
-  gap: 8px;
   transition: all 0.3s ease;
 }
 
-.unified-operator-header.header-hidden {
+/* Standard header (full size) */
+.unified-operator-header.standard {
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+/* Compact header (minimal size) */
+.unified-operator-header.compact {
+  padding: 4px 8px;
+  min-height: 28px;
+  background: rgba(243, 244, 246, 0.7);
+  border-bottom: 1px solid rgba(229, 231, 235, 0.5);
+}
+
+.unified-operator-header.compact.header-hidden {
   opacity: 0;
   height: 0;
   min-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+  padding: 0;
   margin: 0;
   border-bottom: none;
   overflow: hidden;
+}
+
+/* Overlay header (appears on hover) */
+.unified-operator-header.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 8px 12px;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px 6px 0 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideDown 0.2s ease-out;
+  backdrop-filter: blur(2px);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.compact-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.operator-label-compact {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  flex: 1;
+  text-align: center;
 }
 
 .drag-handle {
@@ -170,6 +280,12 @@ function getCurrentType(): string {
   color: #6b7280;
   margin-right: 8px;
   font-weight: bold;
+}
+
+.drag-handle.compact {
+  font-size: 10px;
+  margin-right: 4px;
+  opacity: 0.6;
 }
 
 .drag-handle:active {
