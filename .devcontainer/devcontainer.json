@@ -1,0 +1,34 @@
+// Optimized Dev Container for Vue.js/TypeScript development
+// Uses Node.js-specific image for faster startup and smaller size
+{
+	"name": "Vue.js JsonLogic Editor",
+	// Node.js 22 image (~2-3GB) optimized for JavaScript/TypeScript development
+	// Much faster startup than universal image (~10GB)
+	"image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+	
+	// Additional development tools
+	"features": {
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		"ghcr.io/devcontainers/features/git-lfs:1": {}
+	},
+	
+	// Configure tool-specific properties.
+	"customizations": {
+		// Configure properties specific to VS Code.
+		"vscode": {
+			// Extensions for Vue.js, TypeScript, and general development
+			"extensions": [
+				"Vue.volar",
+				"Vue.vscode-typescript-vue-plugin",
+				"esbenp.prettier-vscode",
+				"bradlc.vscode-tailwindcss"
+			]
+		}
+	},
+	
+	// Forward Vite development server port
+	"forwardPorts": [5173],
+	
+	// Automatically install dependencies after container creation
+	"postCreateCommand": "npm install"
+}

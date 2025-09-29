@@ -63,7 +63,7 @@ export const FIELD_NAMES = [
 // Internal representation for the visual editor
 export interface JsonLogicNode {
   id: string
-  type: 'expression' | 'variable' | 'literal' | 'array'
+  type: 'expression' | 'variable' | 'literal' | 'array' | 'string' | 'number' | 'boolean' | 'date'
   
   // For expressions (operators)
   operator?: string

@@ -264,8 +264,9 @@ function loadExample(example: any) {
   showExamples.value = false
   // Wait for editor to be mounted, then load the example
   setTimeout(() => {
-    if (editor.value) {
-      // This would need to be implemented in the JsonLogicEditor component
+    if (editor.value && editor.value.loadJsonLogic) {
+      editor.value.loadJsonLogic(example.jsonLogic)
+    } else {
       console.log('Loading example:', example.jsonLogic)
     }
   }, 100)
@@ -287,18 +288,20 @@ body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
   width: 100%;
-  overflow-x: auto;
+  overflow-x: visible;
 }
 
 .container {
   width: 100%;
   margin: 0 auto;
   padding: 0 20px;
+  overflow: visible;
 }
 
 .container.full-width {
   max-width: none;
   padding: 0;
+  overflow: visible;
 }
 
 .app-header {

@@ -1,75 +1,136 @@
 <template>
+  <!-- Render as OrOperator if root operator is 'or' -->
+  <OrOperator
+    v-if="localNode.type === 'expression' && localNode.operator === 'or'"
+    :node="localNode"
+    :is-selected="isSelected"
+    @update="$emit('update', $event)"
+    @delete="$emit('delete')"
+    @convert="$emit('convert', $event)"
+    @select="$emit('select')"
+  />
+  <!-- Render as AndOperator if root operator is 'and' -->
+  <AndOperator
+    v-else-if="localNode.type === 'expression' && localNode.operator === 'and'"
+    :node="localNode"
+    :is-selected="isSelected"
+    @update="$emit('update', $event)"
+    @delete="$emit('delete')"
+    @convert="$emit('convert', $event)"
+    @select="$emit('select')"
+  />
+  <!-- Render as ComparisonOperator for comparison operators -->
+  <ComparisonOperator
+    v-else-if="localNode.type === 'expression' && isComparisonOperator(localNode.operator)"
+    :node="localNode"
+    :is-selected="isSelected"
+    @update="$emit('update', $event)"
+    @delete="$emit('delete')"
+    @convert="$emit('convert', $event)"
+    @select="$emit('select')"
+  />
+  <!-- Render as LiteralOperator for literal, variable, and array types -->
+  <LiteralOperator
+    v-else-if="localNode.type === 'literal' || localNode.type === 'variable' || localNode.type === 'array'"
+    :node="localNode"
+    :is-selected="isSelected"
+    @update="$emit('update', $event)"
+    @delete="$emit('delete')"
+    @convert="$emit('convert', $event)"
+    @select="$emit('select')"
+  />
+  <!-- Default atom rendering for all other cases -->
   <div 
-    class="json-logic-atom"
-    :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered }"
+    v-else
+    ref="atomRef"
+    class="json-logic-atom resize-handle-container"
+    :class="{ 'is-dragging': isDragging, 'is-hovered': isDirectlyHovered, 'is-resizing': isResizing, 'is-selected': isSelected }"
     :data-ui-hint="currentOperator?.uiHints?.join(' ')"
+    :data-display-mode="displayMode"
+    :style="resizeStyle"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
+    @click.stop="handleSelect"
   >
     <!-- Header with operator and controls -->
     <div class="atom-header" @mouseenter="onPreviewEnter" @mouseleave="onPreviewLeave">
+      <!-- Display mode buttons -->
+      <DisplayModeButtons 
+        v-if="localNode.operator"
+        v-model="displayMode"
+      />
+      
       <div class="drag-handle">⋮⋮</div>
       
-      <button 
-        v-if="localNode.operator && localNode.arguments && localNode.arguments.length > 0" 
-        @click="toggleCollapse" 
-        class="collapse-btn" 
-        :title="isCollapsed ? 'Expand' : 'Collapse'"
-      >
-        {{ isCollapsed ? '▶' : '▼' }}
-      </button>
-      
-      <select 
-        v-model="localNode.operator" 
-        @change="onOperatorChange"
-        class="operator-select"
-      >
-        <option value="">Select operator...</option>
-        <optgroup 
-          v-for="category in operatorCategories" 
-          :key="category"
-          :label="category.toUpperCase()"
+      <div class="operator-wrapper">
+        <select 
+          v-if="!localNode.operator"
+          v-model="localNode.operator" 
+          @change="onOperatorChange"
+          class="operator-select"
         >
-          <option 
-            v-for="op in getOperatorsByCategory(category)"
-            :key="op.name"
-            :value="op.name"
+          <option value="">Select operator...</option>
+          <optgroup 
+            v-for="category in operatorCategories" 
+            :key="category"
+            :label="category.toUpperCase()"
           >
-            {{ op.label }}
-          </option>
-        </optgroup>
-      </select>
+            <option 
+              v-for="op in getOperatorsByCategory(category)"
+              :key="op.name"
+              :value="op.name"
+            >
+              {{ op.label }}
+            </option>
+          </optgroup>
+        </select>
+        
+        <!-- Operator as clickable button when selected -->
+        <button 
+          v-else
+          @click="toggleConversionMenu" 
+          class="operator-button"
+          :title="showConversionMenu ? 'Close conversion menu' : `Convert ${localNode.operator} to different operator`"
+        >
+          {{ currentOperator?.label || localNode.operator }}
+        </button>
+        
+        <ConversionMenu
+          :is-open="showConversionMenu"
+          :options="conversionOptions"
+          @close="showConversionMenu = false"
+          @convert="convertToOperator"
+        />
+      </div>
       
-      <span v-if="isCollapsed && localNode.operator" class="condition-count">
+      <span v-if="displayMode === 'collapsed' && localNode.operator" class="condition-count">
         ({{ localNode.arguments?.length || 0 }} {{ localNode.arguments?.length === 1 ? 'argument' : 'arguments' }})
       </span>
       
-      <div class="header-controls">
-        <div class="conversion-dropdown" v-if="conversionOptions.length > 0">
-          <button @click="toggleConversionMenu" class="convert-btn" title="Convert operator">
-            ⟲
-          </button>
-          <div v-if="showConversionMenu" class="conversion-menu">
-            <button 
-              v-for="option in conversionOptions"
-              :key="option.operator"
-              @click="convertToOperator(option.operator)"
-              class="conversion-option"
-              :title="option.description"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-        </div>
-        <button @click="$emit('delete')" class="delete-btn" title="Delete">×</button>
-      </div>
+      <button 
+        v-if="displayMode !== 'collapsed'"
+        @click="$emit('delete')" 
+        class="delete-btn" 
+        :title="`Delete this ${localNode.operator || 'operator'}`"
+      >
+        ×
+      </button>
     </div>
 
+    <!-- Resize handles - only horizontal -->
+    <ResizeHandle
+      v-if="displayMode !== 'collapsed'"
+      direction="horizontal"
+      @resize="onHorizontalResize"
+      @resize-start="onResizeStart"
+      @resize-end="onResizeEnd"
+    />
+
     <!-- Preview when collapsed and hovered -->
-    <div v-if="isCollapsed && showPreview && localNode.operator" class="preview-popup">
+    <div v-if="displayMode === 'collapsed' && showPreview && localNode.operator" class="preview-popup">
       <div class="preview-content">
         <div class="preview-arguments">
           <div 
@@ -85,11 +146,11 @@
             ... and {{ (localNode.arguments?.length || 0) - 3 }} more
           </div>
         </div>
-      </div>
+    </div>
     </div>
 
     <!-- Arguments -->
-    <div v-if="localNode.operator && !isCollapsed" class="atom-body">
+    <div v-if="localNode.operator && displayMode !== 'collapsed'" class="atom-body">
       <div class="arguments-container">
         <div 
           v-for="(argument, index) in localNode.arguments" 
@@ -125,59 +186,21 @@
             @delete="onArgumentDelete(index)"
           />
           
-          <!-- Variable input with autocomplete -->
-          <div v-else-if="argument.type === 'variable'" class="variable-input">
-            <span class="input-type-label">var:</span>
-            <FieldNameInput
-              v-model="argument.value"
-              @update:modelValue="onArgumentUpdate(index, argument)"
-              placeholder="Field name (e.g., person.firstName)"
-              class="field-name-input-wrapper"
-            />
-            <div class="argument-controls" :class="{ 'is-visible': hoveredArgumentIndex === index }">
-              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
-            </div>
-          </div>
+          <!-- Use LiteralOperator for variables, literals, and arrays -->
+          <LiteralOperator
+            v-else-if="argument.type === 'variable' || argument.type === 'literal' || argument.type === 'array'"
+            :node="argument"
+            :is-selected="isSelected"
+            @update="onArgumentUpdate(index, $event)"
+            @delete="onArgumentDelete(index)"
+            @convert="onArgumentUpdate(index, $event)"
+            @select="$emit('select')"
+          />
           
-          <!-- Array input -->
-          <div v-else-if="argument.type === 'array'" class="array-input">
-            <span class="input-type-label">array:</span>
-            <div class="array-items">
-              <div v-for="(item, itemIndex) in argument.items" :key="itemIndex" class="array-item">
-                <input 
-                  v-model="item.value" 
-                  @input="onArrayItemUpdate(index, itemIndex, item)"
-                  placeholder="Array item"
-                  class="array-item-input"
-                />
-                <button @click="removeArrayItem(index, itemIndex)" class="delete-item-btn">×</button>
-              </div>
-              <button @click="addArrayItem(index)" class="add-item-btn">+ Item</button>
-            </div>
-            <div class="argument-controls" :class="{ 'is-visible': hoveredArgumentIndex === index }">
-              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
-            </div>
-          </div>
-          
-          <!-- Literal input with type selection -->
-          <div v-else class="literal-input">
-            <select v-model="argument.type" @change="onArgumentTypeChange(index)" class="type-select">
-              <option value="literal">Literal</option>
-              <option value="variable">Variable</option>
-              <option value="array">Array</option>
-              <option value="expression">Expression</option>
-            </select>
-            <input 
-              v-if="argument.type === 'literal'"
-              v-model="argument.value" 
-              @input="onArgumentUpdate(index, argument)"
-              :placeholder="getLiteralPlaceholder(argument, index)"
-              class="value-input"
-              :type="getLiteralInputType(argument)"
-            />
-            <div class="argument-controls" :class="{ 'is-visible': hoveredArgumentIndex === index }">
-              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
-            </div>
+          <!-- Fallback for other argument types -->
+          <div v-else class="unknown-argument">
+            <span>Unknown argument type: {{ argument.type }}</span>
+            <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
           </div>
         </div>
         
@@ -193,36 +216,154 @@
       </div>
     </div>
   </div>
+
+  <!-- Full-screen overlay -->
+  <div v-if="displayMode === 'full'" class="fullscreen-overlay" @click.self="exitFullMode">
+    <div class="fullscreen-content">
+      <div class="fullscreen-header">
+        <!-- Display mode buttons in full screen -->
+        <DisplayModeButtons v-model="displayMode" />
+        
+        <h3>{{ localNode.operator?.toUpperCase() }} Expression</h3>
+        
+        <div class="spacer"></div>
+      </div>
+      <div class="fullscreen-body">
+        <div class="arguments-container">
+          <div 
+            v-for="(argument, index) in localNode.arguments" 
+            :key="argument.id"
+            class="argument-wrapper"
+            @mouseenter="onArgumentMouseEnter(index, $event)"
+            @mouseleave="onArgumentMouseLeave(index)"
+          >
+            <div class="argument-label" v-if="getArgumentLabel(index)">
+              {{ getArgumentLabel(index) }}:
+            </div>
+            
+            <!-- Specific operator components for better layout -->
+            <OrOperator
+              v-if="argument.type === 'expression' && argument.operator === 'or'"
+              :node="argument"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentConvert(index, $event)"
+            />
+            <AndOperator
+              v-else-if="argument.type === 'expression' && argument.operator === 'and'"
+              :node="argument"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentConvert(index, $event)"
+            />
+            <!-- Recursive component for other nested expressions -->
+            <JsonLogicAtom
+              v-else-if="argument.type === 'expression'"
+              :node="argument"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentConvert(index, $event)"
+            />
+            <!-- Use LiteralOperator for variables, literals, and arrays -->
+            <LiteralOperator
+              v-else-if="argument.type === 'variable' || argument.type === 'literal' || argument.type === 'array'"
+              :node="argument"
+              :is-selected="isSelected"
+              @update="onArgumentUpdate(index, $event)"
+              @delete="onArgumentDelete(index)"
+              @convert="onArgumentUpdate(index, $event)"
+              @select="$emit('select')"
+            />
+            <!-- Fallback for other argument types -->
+            <div v-else class="unknown-argument">
+              <span>Unknown argument type: {{ argument.type }}</span>
+              <button @click="onArgumentDelete(index)" class="delete-arg-btn">×</button>
+            </div>
+          </div>
+          
+          <!-- Add new argument button -->
+          <div v-if="canAddMoreArgs" class="add-arg-wrapper">
+            <button 
+              @click="addArgument" 
+              class="add-arg-btn"
+            >
+              + Add {{ getNextArgumentLabel() }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import type { JsonLogicNode, JsonLogicOperator } from '../types/JsonLogic'
 import { OPERATORS } from '../types/JsonLogic'
-import FieldNameInput from './FieldNameInput.vue'
+
 import OrOperator from './OrOperator.vue'
 import AndOperator from './AndOperator.vue'
+import ComparisonOperator from './ComparisonOperator.vue'
+import DisplayModeButtons from './DisplayModeButtons.vue'
+import ConversionMenu from './ConversionMenu.vue'
+import ResizeHandle from './ResizeHandle.vue'
 import { getConversionOptions, convertOperatorNode } from '../utils/operatorConversion'
+import { useDisplayMode } from '../composables/useDisplayMode'
+
 
 interface Props {
   node: JsonLogicNode
+  isSelected?: boolean
 }
 
 interface Emits {
   (e: 'update', node: JsonLogicNode): void
   (e: 'delete'): void
+  (e: 'convert', operator: string): void
+  (e: 'select'): void
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  isSelected: false
+})
 const emit = defineEmits<Emits>()
 
 const localNode = ref<JsonLogicNode>({ ...props.node })
 const isDragging = ref(false)
 const isDirectlyHovered = ref(false)
+const atomRef = ref<HTMLElement>()
 const hoveredArgumentIndex = ref<number | null>(null)
 const showConversionMenu = ref(false)
-const isCollapsed = ref(false)
+// Display mode management
+const { displayMode, exitFullMode } = useDisplayMode()
 const showPreview = ref(false)
+
+// Simple resize management
+const isResizing = ref(false)
+const currentWidth = ref(0)
+
+function onResizeStart() {
+  isResizing.value = true
+  if (atomRef.value) {
+    currentWidth.value = atomRef.value.getBoundingClientRect().width
+  }
+}
+
+function onResizeEnd() {
+  isResizing.value = false
+}
+
+function onHorizontalResize(delta: { x: number; y: number }) {
+  if (!atomRef.value) return
+  
+  // Add delta to current width (small incremental changes)
+  currentWidth.value = Math.max(200, Math.min(800, currentWidth.value + delta.x))
+  atomRef.value.style.width = `${currentWidth.value}px`
+}
+
+const resizeStyle = computed(() => {
+  return {} // Let CSS handle default sizing
+})
 
 // Watch for external changes
 watch(() => props.node, (newNode) => {
@@ -248,6 +389,13 @@ const conversionOptions = computed(() => {
   if (!localNode.value.operator) return []
   return getConversionOptions(localNode.value.operator)
 })
+
+// Helper function to check if operator is a comparison operator
+function isComparisonOperator(operator: string | undefined): boolean {
+  if (!operator) return false
+  const op = OPERATORS.find(o => o.name === operator)
+  return op?.category === 'comparison'
+}
 
 // Methods
 function getOperatorsByCategory(category: string): JsonLogicOperator[] {
@@ -276,29 +424,7 @@ function getNextArgumentLabel(): string {
   }
 }
 
-function getLiteralPlaceholder(argument: JsonLogicNode, index: number): string {
-  if (argument.type === 'variable') return 'Field name'
-  
-  // Provide context-specific placeholders based on current operator and argument position
-  const operator = currentOperator.value
-  if (operator?.argumentLabels && operator.argumentLabels[index]) {
-    const label = operator.argumentLabels[index].toLowerCase()
-    if (label.includes('status')) return 'e.g., has-accepted, is-invited'
-    if (label.includes('separator')) return 'e.g., ", " or " - "'
-    if (label.includes('email')) return 'e.g., john@example.com'
-    if (label.includes('name')) return 'e.g., John, Admin'
-    if (label.includes('age')) return 'e.g., 18, 65'
-    if (label.includes('date')) return 'e.g., 2023-01-01'
-  }
-  
-  return 'Enter value (text, number, true/false)'
-}
 
-function getLiteralInputType(argument: JsonLogicNode): string {
-  if (typeof argument.value === 'number') return 'number'
-  if (typeof argument.value === 'boolean') return 'checkbox'
-  return 'text'
-}
 
 function generateId(): string {
   return Math.random().toString(36).substr(2, 9)
@@ -396,73 +522,9 @@ function onArgumentDelete(index: number) {
   emit('update', localNode.value)
 }
 
-function onArgumentTypeChange(index: number) {
-  if (!localNode.value.arguments) return
-  
-  const argument = localNode.value.arguments[index]
-  
-  // Reset value based on new type
-  switch (argument.type) {
-    case 'variable':
-      argument.value = ''
-      break
-    case 'array':
-      argument.items = [{ id: generateId(), type: 'literal', value: '' }]
-      delete argument.value
-      break
-    case 'expression':
-      argument.operator = ''
-      argument.arguments = []
-      delete argument.value
-      break
-    case 'literal':
-    default:
-      argument.value = ''
-      delete argument.items
-      delete argument.operator
-      delete argument.arguments
-      break
-  }
-  
-  emit('update', localNode.value)
-}
 
-function addArrayItem(argumentIndex: number) {
-  if (!localNode.value.arguments) return
-  
-  const argument = localNode.value.arguments[argumentIndex]
-  if (argument.type !== 'array') return
-  
-  if (!argument.items) argument.items = []
-  
-  argument.items.push({
-    id: generateId(),
-    type: 'literal',
-    value: ''
-  })
-  
-  emit('update', localNode.value)
-}
 
-function removeArrayItem(argumentIndex: number, itemIndex: number) {
-  if (!localNode.value.arguments) return
-  
-  const argument = localNode.value.arguments[argumentIndex]
-  if (argument.type !== 'array' || !argument.items) return
-  
-  argument.items.splice(itemIndex, 1)
-  emit('update', localNode.value)
-}
 
-function onArrayItemUpdate(argumentIndex: number, itemIndex: number, updatedItem: JsonLogicNode) {
-  if (!localNode.value.arguments) return
-  
-  const argument = localNode.value.arguments[argumentIndex]
-  if (argument.type !== 'array' || !argument.items) return
-  
-  argument.items[itemIndex] = updatedItem
-  emit('update', localNode.value)
-}
 
 function onArgumentConvert(index: number, newOperator: string) {
   if (!localNode.value.arguments) return
@@ -538,13 +600,10 @@ function convertToOperator(newOperator: string) {
   emit('update', localNode.value)
 }
 
-// Collapse management
-function toggleCollapse() {
-  isCollapsed.value = !isCollapsed.value
-}
+// Display mode functions are provided by useDisplayMode composable
 
 function onPreviewEnter() {
-  if (isCollapsed.value) {
+  if (displayMode.value === 'collapsed') {
     showPreview.value = true
   }
 }
@@ -565,6 +624,15 @@ function getPreviewText(argument: JsonLogicNode): string {
   }
   return 'condition'
 }
+
+function handleSelect() {
+  emit('select')
+}
+
+// Cleanup on unmount
+onUnmounted(() => {
+  // No cleanup needed for simple resize
+})
 </script>
 
 <style scoped>
@@ -573,13 +641,110 @@ function getPreviewText(argument: JsonLogicNode): string {
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   background: white;
-  margin: 8px 0;
+  margin: 8px 2px 8px 0;
   min-width: 200px;
-  width: 100%;
+  max-width: calc(100vw - 40px);
+  width: auto;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.2s ease;
   overflow: visible;
 }
+
+.json-logic-atom.is-resizing {
+  user-select: none;
+  pointer-events: auto;
+  z-index: 1000;
+  position: relative;
+}
+
+.json-logic-atom.is-selected {
+  border: 2px solid #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.json-logic-atom .atom-body {
+  padding: 12px;
+  overflow: visible;
+  height: auto;
+  box-sizing: border-box;
+}
+
+/* Responsive behavior */
+@media (max-width: 768px) {
+  .json-logic-atom {
+    min-width: 150px;
+    margin: 4px 0;
+  }
+  
+  .json-logic-atom[data-display-mode="inplace"] {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .json-logic-atom {
+    min-width: 120px;
+    font-size: 14px;
+  }
+  
+  .atom-header {
+    padding: 6px 8px;
+  }
+  
+  .operator-button {
+    font-size: 12px;
+    padding: 3px 8px;
+  }
+}
+
+/* Collapsed state - compact horizontal and vertical */
+.json-logic-atom[data-display-mode="collapsed"] {
+  display: inline-block;
+  margin: 4px 8px 4px 0;
+  min-width: auto;
+  max-width: 300px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .atom-header {
+  padding: 6px 12px;
+  min-height: auto;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .operator-select {
+  min-width: 80px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+
+
+.json-logic-atom[data-display-mode="collapsed"] .condition-count {
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .header-controls {
+  gap: 8px;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .convert-btn,
+.json-logic-atom[data-display-mode="collapsed"] .delete-btn,
+.json-logic-atom[data-display-mode="collapsed"] .expand-btn {
+  padding: 4px 8px;
+  min-width: 60px;
+  font-size: 11px;
+}
+
+.json-logic-atom[data-display-mode="collapsed"] .convert-label,
+.json-logic-atom[data-display-mode="collapsed"] .delete-label,
+.json-logic-atom[data-display-mode="collapsed"] .expand-label {
+  font-size: 10px;
+}
+
+
 
 .json-logic-atom:hover {
   border-color: #3b82f6;
@@ -607,13 +772,10 @@ function getPreviewText(argument: JsonLogicNode): string {
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
   border-radius: 6px 6px 0 0;
-}
-
-.header-controls {
-  display: flex;
-  align-items: center;
   gap: 8px;
 }
+
+
 
 .conversion-dropdown {
   position: relative;
@@ -623,53 +785,40 @@ function getPreviewText(argument: JsonLogicNode): string {
   background: #8b5cf6;
   color: white;
   border: none;
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
+  border-radius: 6px;
+  padding: 8px 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
   display: flex;
   align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  min-width: 90px;
   justify-content: center;
 }
 
 .convert-btn:hover {
   background: #7c3aed;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
 }
 
-.conversion-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-  min-width: 120px;
-  max-height: 200px;
-  overflow-y: auto;
+.convert-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
 }
 
-.conversion-option {
-  display: block;
-  width: 100%;
-  padding: 8px 12px;
-  text-align: left;
-  border: none;
-  background: none;
-  cursor: pointer;
+.convert-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.convert-label {
   font-size: 12px;
-  border-bottom: 1px solid #f3f4f6;
 }
 
-.conversion-option:hover {
-  background: #f3f4f6;
-}
 
-.conversion-option:last-child {
-  border-bottom: none;
-}
 
 .drag-handle {
   cursor: grab;
@@ -682,28 +831,241 @@ function getPreviewText(argument: JsonLogicNode): string {
   cursor: grabbing;
 }
 
+.operator-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  margin-right: 8px;
+}
+
 .operator-select {
   flex: 1;
   padding: 4px 8px;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  margin-right: 8px;
+}
+
+.operator-button {
+  background: #f8fafc;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex: 1;
+  text-align: left;
+}
+
+.operator-button:hover {
+  background: #f1f5f9;
+  border-color: #9ca3af;
+  color: #1f2937;
 }
 
 .delete-btn {
   background: #ef4444;
   color: white;
   border: none;
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
   cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  margin-left: auto;
+  opacity: 0.7;
 }
 
 .delete-btn:hover {
   background: #dc2626;
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.delete-btn:active {
+  transform: scale(0.9);
+}
+
+.expand-btn {
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  min-width: 80px;
+  justify-content: center;
+}
+
+.expand-btn:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.expand-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.expand-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.expand-label {
+  font-size: 12px;
+}
+
+.full-btn {
+  background: #10b981;
+}
+
+.full-btn:hover {
+  background: #059669;
+}
+
+/* Full-screen overlay */
+.fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.fullscreen-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 90vw;
+  max-height: 90vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fullscreen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 2px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.fullscreen-header .spacer {
+  width: 60px; /* Same width as DisplayModeButtons for centering */
+}
+
+.fullscreen-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.exit-full-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.exit-full-btn:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.exit-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.exit-label {
+  font-size: 13px;
+}
+
+.fullscreen-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  background: white;
+}
+
+.fullscreen-body .arguments-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fullscreen-body .argument-wrapper {
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  background: #f9fafb;
+}
+
+.fullscreen-body .argument-label {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.fullscreen-body .add-arg-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.fullscreen-body .add-arg-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.fullscreen-body .add-arg-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
 .atom-body {
@@ -898,21 +1260,7 @@ function getPreviewText(argument: JsonLogicNode): string {
   background: #059669;
 }
 
-.collapse-btn {
-  background: none;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  margin-right: 8px;
-  transition: background-color 0.2s ease;
-}
 
-.collapse-btn:hover {
-  background: rgba(100, 116, 139, 0.1);
-}
 
 .condition-count {
   color: #64748b;
@@ -977,18 +1325,38 @@ function getPreviewText(argument: JsonLogicNode): string {
     overflow-x: visible;
   }
   
+  .header-controls {
+    gap: 12px;
+  }
+  
   .collapse-btn {
     font-size: 14px;
-    padding: 4px 8px;
+    padding: 8px 12px;
+    min-width: 40px;
+  }
+  
+  .convert-btn, .delete-btn {
+    padding: 10px 14px;
+    min-width: 100px;
+    font-size: 14px;
+  }
+  
+  .convert-label, .delete-label {
+    font-size: 13px;
   }
   
   .condition-count {
-    font-size: 11px;
+    font-size: 12px;
   }
   
   .operator-select {
-    min-width: 120px;
-    font-size: 12px;
+    min-width: 140px;
+    font-size: 13px;
+  }
+  
+  .conversion-menu {
+    min-width: 180px;
+    right: -10px;
   }
 }
 </style>
